@@ -26,6 +26,7 @@ const ICONS = {
   verify: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M9 15l2 2 4-4'],
   inbox: ['M22 12h-6l-2 3h-4l-2-3H2', 'M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11'],
   logout: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
+  chart: ['M3 3v18h18', 'M8 17v-6', 'M13 17V7', 'M18 17v-9'],
 };
 
 function navFor(user) {
@@ -42,6 +43,7 @@ function navFor(user) {
     return [
       ['Dashboard', '/unit', 'overview', true],
       ['UPR review', '/unit/upr', 'verify'],
+      ['Reports', '/unit/reports', 'chart'],
       ['History', '/history', 'history'],
     ];
   if (user?.role === 'dept_head')

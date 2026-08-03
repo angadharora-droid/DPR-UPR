@@ -64,6 +64,7 @@ export default function DprEntry() {
   const [activeIdx, setActiveIdx] = useState(0);
   const [searching, setSearching] = useState(false);
   const [addedNote, setAddedNote] = useState(null); // { name, cat }
+  const [showErrors, setShowErrors] = useState(false);
   const searchTimer = useRef(null);
   const searchSeq = useRef(0);
   const addedTimer = useRef(null);
@@ -332,12 +333,40 @@ export default function DprEntry() {
     }));
   }
 
+  // Item name and UOM must always be filled; on submit a manual line also
+  // needs a quantity (or a remark explaining why it's there).
+  function validateLines(forSubmit) {
+    const problems = [];
+    lines.forEach((l) => {
+      const label = (l.itemNameOverride || '').trim() || '(unnamed item)';
+      if (!(l.itemNameOverride || '').trim()) problems.push(`${l.categoryName || 'Other'}: item name is empty`);
+      else if (!String(l.uom || '').trim()) problems.push(`${label}: UOM is empty`);
+      if (forSubmit && l.isManuallyAdded && !(Number(l.requiredQty) > 0) && !(l.remark || '').trim())
+        problems.push(`${label}: required qty is 0 — set a quantity, add a remark, or remove the row`);
+    });
+    return problems;
+  }
+
+  function reportProblems(problems) {
+    setShowErrors(true);
+    setError(
+      'Please fix: ' +
+        problems.slice(0, 5).join(' · ') +
+        (problems.length > 5 ? ` (+${problems.length - 5} more)` : '')
+    );
+  }
+
+  const missing = (v) => showErrors && !String(v || '').trim();
+
   function refreshCategories() {
     if (!dpr?.department?._id) return;
     api(`/master/categories?departmentId=${dpr.department._id}`).then(setCategories).catch(() => {});
   }
 
   async function saveDraft() {
+    const problems = validateLines(false);
+    if (problems.length) return reportProblems(problems);
+    setShowErrors(false);
     setBusy(true);
     setError('');
     try {
@@ -353,6 +382,9 @@ export default function DprEntry() {
   }
 
   async function submit() {
+    const problems = validateLines(true);
+    if (problems.length) return reportProblems(problems);
+    setShowErrors(false);
     if (!window.confirm(`Submit DPR and sign as "${user.name}"?\n\nItems with Required Qty 0 and no remark will be dropped. After submitting you cannot edit unless the Unit Head sends it back.`))
       return;
     setBusy(true);
@@ -584,15 +616,7 @@ export default function DprEntry() {
               </svg>
             </span>
           </button>
-          {!collapsed[cat.id] && (() => {
-            // POS columns only earn their space when a line in this section
-            // actually carries min-max data; catalog picks show the fields
-            // that matter — item, UOM, required qty, remark.
-            const showStock =
-              !catalogMode ||
-              cat.lines.some((l) => l.closingStock != null || l.bufferDays != null || l.minMaxSuggestedQty != null);
-            const cols = 5 + (showStock ? 2 : 0) + (showStock && showMinMax ? 1 : 0) + (editable ? 1 : 0);
-            return (
+          {!collapsed[cat.id] && (
             <div className="overflow-x-auto">
               <table className="tbl tbl-dense">
                 <thead>
@@ -600,9 +624,9 @@ export default function DprEntry() {
                     <th className="w-8">#</th>
                     <th className="min-w-44">Item</th>
                     <th className="w-28">UOM</th>
-                    {showStock && <th className="w-24 text-right">Closing stock</th>}
-                    {showStock && <th className="w-24 text-right">Buffer days</th>}
-                    {showStock && showMinMax && <th className="w-24 text-right">Suggested</th>}
+                    <th className="w-24 text-right">Closing stock</th>
+                    <th className="w-24 text-right">Buffer days</th>
+                    {showMinMax && <th className="w-24 text-right">Suggested</th>}
                     <th className="w-28 text-right">Required qty</th>
                     <th className="min-w-36">Remark</th>
                     {editable && <th className="w-10"></th>}
@@ -615,7 +639,7 @@ export default function DprEntry() {
                       <td>
                         {l.isManuallyAdded && editable ? (
                           <input
-                            className={inputCls}
+                            className={inputCls + (missing(l.itemNameOverride) ? ' ring-2 ring-danger/50' : '')}
                             value={l.itemNameOverride}
                             placeholder={rmTotal ? 'Type to search catalog' : 'Item name'}
                             ref={(el) => {
@@ -640,20 +664,26 @@ export default function DprEntry() {
                       </td>
                       <td className="text-ink-soft">
                         {l.isManuallyAdded && editable ? (
-                          <input className={inputCls} value={l.uom} title={l.uom} placeholder="kg / pc" onChange={(e) => updateLine(l.idx, 'uom', e.target.value)} />
+                          <input className={inputCls + (missing(l.uom) ? ' ring-2 ring-danger/50' : '')} value={l.uom} title={l.uom} placeholder="kg / pc" onChange={(e) => updateLine(l.idx, 'uom', e.target.value)} />
                         ) : (
                           <span className="whitespace-nowrap" title={l.uom}>{l.uom}</span>
                         )}
                       </td>
-                      {showStock && <td className="num text-ink-soft">{l.closingStock ?? '—'}</td>}
-                      {showStock && <td className="num text-ink-soft">{l.bufferDays ?? '—'}</td>}
-                      {showStock && showMinMax && <td className="num text-ink-soft">{l.minMaxSuggestedQty ?? '—'}</td>}
+                      <td className="num text-ink-soft">{l.closingStock ?? '—'}</td>
+                      <td className="num text-ink-soft">{l.bufferDays ?? '—'}</td>
+                      {showMinMax && <td className="num text-ink-soft">{l.minMaxSuggestedQty ?? '—'}</td>}
                       <td className="num">
                         {editable ? (
                           <input
                             type="number"
                             min="0"
-                            className={inputCls + ' num font-medium'}
+                            className={
+                              inputCls +
+                              ' num font-medium' +
+                              (showErrors && l.isManuallyAdded && !(Number(l.requiredQty) > 0) && !(l.remark || '').trim()
+                                ? ' ring-2 ring-danger/50'
+                                : '')
+                            }
                             value={l.requiredQty}
                             aria-label={`Required quantity for ${l.itemNameOverride || 'item'}`}
                             ref={(el) => {
@@ -699,7 +729,7 @@ export default function DprEntry() {
                   ))}
                   {!cat.lines.length && (
                     <tr>
-                      <td colSpan={cols} className="text-center text-ink-faint text-xs py-4">
+                      <td colSpan={showMinMax ? 9 : 8} className="text-center text-ink-faint text-xs py-4">
                         No items in {cat.name} yet
                       </td>
                     </tr>
@@ -714,8 +744,7 @@ export default function DprEntry() {
                 </div>
               )}
             </div>
-            );
-          })()}
+          )}
         </section>
       ))}
     </Layout>
