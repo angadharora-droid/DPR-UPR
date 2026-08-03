@@ -25,6 +25,11 @@ export default function DprEntry() {
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [rmTotal, setRmTotal] = useState(0);
+  const [quickAdd, setQuickAdd] = useState('');
+  const [suggest, setSuggest] = useState(null); // { key, results, rect }
+  const searchTimer = useRef(null);
+  const searchSeq = useRef(0);
 
   const editable = user.role === 'dept_head' && dpr?.status === 'draft';
 
@@ -38,6 +43,13 @@ export default function DprEntry() {
       .then(setCategories)
       .catch((e) => setError(e.message));
   }, [id]);
+
+  useEffect(() => {
+    if (user.role !== 'dept_head') return;
+    api('/master/raw-materials?q=')
+      .then((r) => setRmTotal(r.total))
+      .catch(() => {}); // no catalog uploaded yet — inputs stay plain
+  }, [user.role]);
 
   async function importPosFile(file) {
     if (!file) return;
@@ -104,6 +116,85 @@ export default function DprEntry() {
     ]);
     setDirty(true);
   }
+
+  // ---- Raw-material autocomplete (unit catalog uploaded by Admin → Units) ----
+
+  function searchRawMaterials(key, q, rect) {
+    clearTimeout(searchTimer.current);
+    const query = q.trim();
+    if (!rmTotal || query.length < 2) {
+      setSuggest(null);
+      return;
+    }
+    const seq = ++searchSeq.current;
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const r = await api(`/master/raw-materials?q=${encodeURIComponent(query)}`);
+        if (searchSeq.current === seq) setSuggest({ key, results: r.results, rect });
+      } catch {
+        // suggestions are best-effort; typing still works without them
+      }
+    }, 250);
+  }
+
+  // The POS category text must equal a DPR category name (case-insensitive)
+  // for auto-filing; otherwise the line stays where the head put it.
+  function matchCategory(rmCat) {
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    if (!norm(rmCat)) return null;
+    const hit = categories.find((c) => norm(c.name) === norm(rmCat));
+    return hit ? String(hit._id) : null;
+  }
+
+  function pickRawMaterial(idx, rm) {
+    const catId = matchCategory(rm.category);
+    setLines((prev) =>
+      prev.map((l, i) =>
+        i === idx ? { ...l, itemNameOverride: rm.name, uom: rm.uom || l.uom, category: catId ?? l.category } : l
+      )
+    );
+    if (catId) setCollapsed((c) => ({ ...c, [catId]: false }));
+    setSuggest(null);
+    setDirty(true);
+  }
+
+  function quickAddPick(rm) {
+    const catId = matchCategory(rm.category);
+    setLines((prev) => [
+      ...prev,
+      {
+        category: catId,
+        item: null,
+        itemNameOverride: rm.name,
+        uom: rm.uom || '',
+        closingStock: null,
+        bufferDays: null,
+        minMaxSuggestedQty: null,
+        requiredQty: 0,
+        remark: '',
+        isManuallyAdded: true,
+      },
+    ]);
+    setCollapsed((c) => ({ ...c, [catId || 'other']: false }));
+    setQuickAdd('');
+    setSuggest(null);
+    setDirty(true);
+  }
+
+  function applyPick(key, rm) {
+    if (key === 'global') quickAddPick(rm);
+    else pickRawMaterial(Number(key.slice(5)), rm);
+  }
+
+  function handleSuggestKeys(e, key) {
+    if (e.key === 'Escape') setSuggest(null);
+    else if (e.key === 'Enter' && suggest?.key === key && suggest.results?.length) {
+      e.preventDefault();
+      applyPick(key, suggest.results[0]);
+    }
+  }
+
+  const closeSuggestSoon = () => setTimeout(() => setSuggest(null), 150);
 
   function linesPayload() {
     return lines.map((l) => ({
@@ -221,6 +312,58 @@ export default function DprEntry() {
         </Note>
       )}
 
+      {suggest && (
+        <div
+          className="fixed z-50 rounded-lg border border-line bg-surface shadow-lg max-h-64 overflow-auto"
+          style={{
+            left: suggest.rect.left,
+            top: suggest.rect.bottom + 4,
+            width: Math.min(Math.max(suggest.rect.width, 280), window.innerWidth - suggest.rect.left - 12),
+          }}
+        >
+          {suggest.results.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-ink-faint">No matching raw materials</div>
+          ) : (
+            suggest.results.map((rm) => (
+              <button
+                key={rm._id}
+                type="button"
+                className="w-full text-left px-3 py-2 hover:bg-line-soft flex items-baseline justify-between gap-3 text-sm transition-colors"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  applyPick(suggest.key, rm);
+                }}
+              >
+                <span className="truncate">{rm.name}</span>
+                <span className="text-xs text-ink-faint whitespace-nowrap shrink-0">
+                  {rm.uom}
+                  {rm.category ? ` · ${rm.category}` : ''}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+
+      {editable && rmTotal > 0 && (
+        <div className="card p-3.5 mb-4">
+          <label className="block text-xs text-ink-soft mb-1">
+            Quick add — search the unit's {rmTotal.toLocaleString()} raw materials; picking one fills the item name, UOM and category
+          </label>
+          <input
+            className={inputCls}
+            value={quickAdd}
+            placeholder="Start typing an item name…"
+            onChange={(e) => {
+              setQuickAdd(e.target.value);
+              searchRawMaterials('global', e.target.value, e.target.getBoundingClientRect());
+            }}
+            onKeyDown={(e) => handleSuggestKeys(e, 'global')}
+            onBlur={closeSuggestSoon}
+          />
+        </div>
+      )}
+
       {grouped.map((cat) => (
         <section key={cat.id} className="card mb-4 overflow-hidden">
           <button
@@ -261,8 +404,13 @@ export default function DprEntry() {
                           <input
                             className={inputCls}
                             value={l.itemNameOverride}
-                            placeholder="Item name"
-                            onChange={(e) => updateLine(l.idx, 'itemNameOverride', e.target.value)}
+                            placeholder={rmTotal ? 'Type to search catalog' : 'Item name'}
+                            onChange={(e) => {
+                              updateLine(l.idx, 'itemNameOverride', e.target.value);
+                              searchRawMaterials(`line-${l.idx}`, e.target.value, e.target.getBoundingClientRect());
+                            }}
+                            onKeyDown={(e) => handleSuggestKeys(e, `line-${l.idx}`)}
+                            onBlur={closeSuggestSoon}
                           />
                         ) : (
                           <span>

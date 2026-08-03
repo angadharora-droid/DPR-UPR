@@ -1,14 +1,18 @@
 import { Router } from 'express';
+import multer from 'multer';
 import Unit from '../models/Unit.js';
 import Department from '../models/Department.js';
 import Category from '../models/Category.js';
 import Item from '../models/Item.js';
+import RawMaterial from '../models/RawMaterial.js';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { logAudit } from '../services/audit.js';
 import { sendUprEmail } from '../services/mailer.js';
+import { parseRawMaterials } from '../services/importer.js';
 import { DEPARTMENT_MASTER } from '../masterData.js';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 router.use(authRequired, requireRole('admin'));
 
 router.get('/', async (req, res, next) => {
@@ -109,6 +113,50 @@ router.post('/:id/test-email', async (req, res, next) => {
       unit,
     });
     res.json({ ok: true, devMode, from: unit.smtpUser || process.env.SMTP_USER || '(dev mode)', to });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Upload the unit's raw-material catalog from the POS export/report file.
+// Replaces the previous catalog wholesale (same semantics as re-importing a
+// POS min-max file) — the file is the source of truth.
+router.post('/:id/raw-materials', upload.single('file'), async (req, res, next) => {
+  try {
+    const unit = await Unit.findById(req.params.id);
+    if (!unit) return res.status(404).json({ error: 'Unit not found' });
+    if (!req.file) return res.status(400).json({ error: 'File required (.xlsx, .xls or .csv)' });
+
+    let parsed;
+    try {
+      parsed = parseRawMaterials(req.file.buffer);
+    } catch (e) {
+      return res.status(400).json({ error: 'File parse failed: ' + e.message });
+    }
+    if (!parsed.materials.length)
+      return res.status(400).json({ error: 'No raw materials found in the file' });
+
+    await RawMaterial.deleteMany({ unit: unit._id });
+    await RawMaterial.insertMany(parsed.materials.map((m) => ({ ...m, unit: unit._id })));
+    unit.rawMaterialCount = parsed.materials.length;
+    unit.rawMaterialsUpdatedAt = new Date();
+    unit.rawMaterialsSource = req.file.originalname;
+    await unit.save();
+
+    await logAudit({
+      entityType: 'unit', entityId: unit._id, action: 'raw-materials-import', changedBy: req.user._id,
+      newValue: {
+        file: req.file.originalname,
+        imported: parsed.materials.length,
+        skippedInactive: parsed.skippedInactive,
+        duplicates: parsed.duplicates,
+      },
+    });
+    res.json({
+      imported: parsed.materials.length,
+      skippedInactive: parsed.skippedInactive,
+      duplicates: parsed.duplicates,
+    });
   } catch (err) {
     next(err);
   }

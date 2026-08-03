@@ -2,6 +2,7 @@ import { Router } from 'express';
 import Department from '../models/Department.js';
 import Category from '../models/Category.js';
 import Item from '../models/Item.js';
+import RawMaterial from '../models/RawMaterial.js';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { logAudit } from '../services/audit.js';
 
@@ -40,6 +41,32 @@ router.get('/items', async (req, res, next) => {
     const { categoryId } = req.query;
     if (!categoryId) return res.status(400).json({ error: 'categoryId required' });
     res.json(await Item.find({ category: categoryId, active: true }).sort({ name: 1 }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Raw-material lookup for DPR entry — scoped to the caller's own unit
+// (admin passes unitId). Returns the catalog size plus the top name matches,
+// prefix matches ranked before substring matches.
+router.get('/raw-materials', async (req, res, next) => {
+  try {
+    const unitId = req.user.role === 'admin' ? req.query.unitId : req.user.unit;
+    if (!unitId) return res.status(400).json({ error: 'unitId required' });
+    const total = await RawMaterial.countDocuments({ unit: unitId, active: true });
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.json({ total, results: [] });
+    const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const found = await RawMaterial.find({ unit: unitId, active: true, name: rx })
+      .sort({ name: 1 })
+      .limit(50)
+      .select('name uom category');
+    const ql = q.toLowerCase();
+    const results = [
+      ...found.filter((m) => m.name.toLowerCase().startsWith(ql)),
+      ...found.filter((m) => !m.name.toLowerCase().startsWith(ql)),
+    ].slice(0, 20);
+    res.json({ total, results });
   } catch (err) {
     next(err);
   }
