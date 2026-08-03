@@ -27,28 +27,42 @@ async function main() {
     console.log('Wiped existing data');
   }
 
+  // Backfill loginId for users seeded before the field existed
+  async function ensureLoginId(user, loginId) {
+    if (user && !user.loginId) {
+      user.loginId = loginId;
+      await user.save();
+      console.log(`Set login ID "${loginId}" on ${user.email}`);
+    }
+  }
+
   // Admin
   let admin = await User.findOne({ email: 'admin@cph.local' });
   if (!admin) {
     admin = await User.create({
       name: 'Group Admin',
       email: 'admin@cph.local',
+      loginId: 'admin',
       role: 'admin',
       passwordHash: await bcrypt.hash('admin123', 10),
     });
     console.log('Created admin@cph.local / admin123');
   }
+  await ensureLoginId(admin, 'admin');
 
   // Purchase Head (central, one for the whole group)
-  if (!(await User.findOne({ email: 'purchase@cph.local' }))) {
-    await User.create({
+  let purchase = await User.findOne({ email: 'purchase@cph.local' });
+  if (!purchase) {
+    purchase = await User.create({
       name: 'Purchase Head',
       email: 'purchase@cph.local',
+      loginId: 'purchase',
       role: 'purchase_head',
       passwordHash: await bcrypt.hash('purchase123', 10),
     });
     console.log('Created purchase@cph.local / purchase123');
   }
+  await ensureLoginId(purchase, 'purchase');
 
   // Demo unit: pablo
   let unit = await Unit.findOne({ name: 'pablo' });
@@ -88,22 +102,26 @@ async function main() {
 
   // Demo users for pablo
   const demoUsers = [
-    ['Unit Head Pablo', 'unithead.pablo@cph.local', 'unit_head', null, 'unit123'],
-    ['Kitchen Head Pablo', 'kitchen.pablo@cph.local', 'dept_head', 'Main Kitchen', 'kitchen123'],
-    ['Bar Head Pablo', 'bar.pablo@cph.local', 'dept_head', 'Bar', 'bar123'],
-    ['HK Head Pablo', 'hk.pablo@cph.local', 'dept_head', 'HouseKeeping & Maintenance', 'hk123'],
+    ['Unit Head Pablo', 'unithead.pablo@cph.local', 'unithead.pablo', 'unit_head', null, 'unit123'],
+    ['Kitchen Head Pablo', 'kitchen.pablo@cph.local', 'kitchen.pablo', 'dept_head', 'Main Kitchen', 'kitchen123'],
+    ['Bar Head Pablo', 'bar.pablo@cph.local', 'bar.pablo', 'dept_head', 'Bar', 'bar123'],
+    ['HK Head Pablo', 'hk.pablo@cph.local', 'hk.pablo', 'dept_head', 'HouseKeeping & Maintenance', 'hk123'],
   ];
-  for (const [name, email, role, deptName, password] of demoUsers) {
-    if (!(await User.findOne({ email }))) {
+  for (const [name, email, loginId, role, deptName, password] of demoUsers) {
+    const existing = await User.findOne({ email });
+    if (!existing) {
       await User.create({
         name,
         email,
+        loginId,
         role,
         unit: unit._id,
         department: deptName ? deptByName[deptName]._id : null,
         passwordHash: await bcrypt.hash(password, 10),
       });
       console.log(`Created ${email} / ${password}`);
+    } else {
+      await ensureLoginId(existing, loginId);
     }
   }
 
@@ -111,13 +129,13 @@ async function main() {
   const samples = writeSampleFiles();
   console.log('Sample POS files written:', samples.join(', '));
 
-  console.log('\nSeed complete. Logins:');
-  console.log('  admin@cph.local / admin123           (Admin)');
-  console.log('  unithead.pablo@cph.local / unit123   (Unit Head — pablo)');
-  console.log('  kitchen.pablo@cph.local / kitchen123 (Dept Head — Main Kitchen)');
-  console.log('  bar.pablo@cph.local / bar123         (Dept Head — Bar)');
-  console.log('  hk.pablo@cph.local / hk123           (Dept Head — HouseKeeping)');
-  console.log('  purchase@cph.local / purchase123     (Purchase Head)');
+  console.log('\nSeed complete. Logins (login ID or email both work):');
+  console.log('  admin / admin123            (Admin)');
+  console.log('  unithead.pablo / unit123    (Unit Head — pablo)');
+  console.log('  kitchen.pablo / kitchen123  (Dept Head — Main Kitchen)');
+  console.log('  bar.pablo / bar123          (Dept Head — Bar)');
+  console.log('  hk.pablo / hk123            (Dept Head — HouseKeeping)');
+  console.log('  purchase / purchase123      (Purchase Head)');
   await mongoose.disconnect();
 }
 

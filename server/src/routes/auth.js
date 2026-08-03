@@ -11,6 +11,7 @@ function publicUser(u) {
     id: u._id,
     name: u.name,
     email: u.email,
+    loginId: u.loginId || '',
     phone: u.phone,
     role: u.role,
     unit: u.unit,
@@ -20,9 +21,10 @@ function publicUser(u) {
 
 router.post('/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-    const user = await User.findOne({ email: String(email).toLowerCase().trim() })
+    const { login, email, password } = req.body;
+    const id = String(login || email || '').toLowerCase().trim();
+    if (!id || !password) return res.status(400).json({ error: 'Login ID (or email) and password required' });
+    const user = await User.findOne({ $or: [{ email: id }, { loginId: id }] })
       .populate('unit', 'name city')
       .populate('department', 'name hasMinMax');
     if (!user || !user.active) return res.status(401).json({ error: 'Invalid credentials' });
