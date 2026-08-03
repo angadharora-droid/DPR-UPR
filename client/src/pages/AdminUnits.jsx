@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
-import Layout, { ErrorNote, btn, inputCls } from '../components/Layout.jsx';
+import Layout, { ErrorNote, Note, btn, inputCls } from '../components/Layout.jsx';
 
 export default function AdminUnits() {
   const [units, setUnits] = useState([]);
   const [error, setError] = useState('');
   const [form, setForm] = useState(null);
   const [mailForm, setMailForm] = useState(null);
+  const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
 
   function load() {
@@ -45,6 +46,24 @@ export default function AdminUnits() {
     }
   }
 
+  async function sendTest(u) {
+    setBusy(true);
+    setError('');
+    setNote('');
+    try {
+      const r = await api(`/admin/units/${u._id}/test-email`, { method: 'POST', body: {} });
+      setNote(
+        r.devMode
+          ? 'Dev mode: SMTP is not configured on the server — no email was delivered.'
+          : `Test email sent from ${r.from} to ${r.to} — check that inbox (and spam).`
+      );
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function toggleActive(u) {
     try {
       await api(`/admin/units/${u._id}`, { method: 'PUT', body: { active: !u.active } });
@@ -61,6 +80,7 @@ export default function AdminUnits() {
       actions={<button className={btn('green')} onClick={() => setForm({ name: '', city: '', cloneFromUnitId: '' })}>+ Add unit</button>}
     >
       <ErrorNote error={error} />
+      {note && <Note tone="ok">{note}</Note>}
       {form && (
         <div className="card p-4 mb-4 grid md:grid-cols-4 gap-3 items-end">
           <div>
@@ -126,6 +146,9 @@ export default function AdminUnits() {
                 <td className="text-right">
                   <button className={btn('subtle') + ' px-2.5 py-1 text-xs mr-1'} onClick={() => setMailForm({ unit: u, smtpUser: u.smtpUser || '', smtpPass: '' })}>
                     Mailbox
+                  </button>
+                  <button className={btn('subtle') + ' px-2.5 py-1 text-xs mr-1'} onClick={() => sendTest(u)} disabled={busy}>
+                    Test email
                   </button>
                   <button className={btn('subtle') + ' px-2.5 py-1 text-xs'} onClick={() => toggleActive(u)}>
                     {u.active ? 'Deactivate' : 'Activate'}

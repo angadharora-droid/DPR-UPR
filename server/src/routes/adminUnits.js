@@ -5,6 +5,7 @@ import Category from '../models/Category.js';
 import Item from '../models/Item.js';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { logAudit } from '../services/audit.js';
+import { sendUprEmail } from '../services/mailer.js';
 import { DEPARTMENT_MASTER } from '../masterData.js';
 
 const router = Router();
@@ -85,6 +86,29 @@ router.put('/:id', async (req, res, next) => {
     const out = unit.toObject();
     delete out.smtpPass;
     res.json(out);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Fire a plain test email through the unit's mailbox (or the group default)
+// so SMTP can be verified without running a DPR→UPR cycle.
+router.post('/:id/test-email', async (req, res, next) => {
+  try {
+    const unit = await Unit.findById(req.params.id).select('+smtpPass');
+    if (!unit) return res.status(404).json({ error: 'Unit not found' });
+    const to = String(req.body?.to || req.user.email || '').trim();
+    if (!to) return res.status(400).json({ error: 'No recipient email' });
+    const { devMode } = await sendUprEmail({
+      to,
+      subject: `Test email — ${unit.name} — CPH Requisition System`,
+      text:
+        `This is a test email from the CPH Requisition System.\n\n` +
+        `Unit: ${unit.name}\nSender mailbox: ${unit.smtpUser || '(group default)'}\n\n` +
+        `If you are reading this, SMTP for this unit is working.`,
+      unit,
+    });
+    res.json({ ok: true, devMode, from: unit.smtpUser || process.env.SMTP_USER || '(dev mode)', to });
   } catch (err) {
     next(err);
   }
