@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useAuth } from '../AuthContext.jsx';
@@ -66,6 +67,23 @@ export default function DprEntry() {
   const searchTimer = useRef(null);
   const searchSeq = useRef(0);
   const addedTimer = useRef(null);
+  const dropRef = useRef(null);
+
+  // The dropdown is positioned from the input's rect at keystroke time; if the
+  // page scrolls or resizes underneath it, close instead of drifting.
+  useEffect(() => {
+    if (!suggest) return;
+    const onMove = (e) => {
+      if (dropRef.current && e.target instanceof Node && dropRef.current.contains(e.target)) return;
+      setSuggest(null);
+    };
+    window.addEventListener('scroll', onMove, true);
+    window.addEventListener('resize', onMove);
+    return () => {
+      window.removeEventListener('scroll', onMove, true);
+      window.removeEventListener('resize', onMove);
+    };
+  }, [suggest]);
 
   const editable = user.role === 'dept_head' && dpr?.status === 'draft';
   // With a raw-material catalog loaded, entry is search-first: categories come
@@ -428,13 +446,15 @@ export default function DprEntry() {
         </Note>
       )}
 
-      {suggest && (
+      {suggest && createPortal(
         <div
-          className="fixed z-50 rounded-lg border border-line bg-surface shadow-lg max-h-72 overflow-auto"
+          ref={dropRef}
+          className="fixed z-50 rounded-lg border border-line bg-surface shadow-lg overflow-auto"
           style={{
             left: suggest.rect.left,
             top: suggest.rect.bottom + 4,
             width: Math.min(Math.max(suggest.rect.width, 320), window.innerWidth - suggest.rect.left - 12),
+            maxHeight: Math.max(160, Math.min(288, window.innerHeight - suggest.rect.bottom - 16)),
           }}
         >
           {suggest.results.map((rm, i) => (
@@ -480,7 +500,8 @@ export default function DprEntry() {
               More matches exist — keep typing to narrow the list
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
 
       {editable && catalogMode && (
