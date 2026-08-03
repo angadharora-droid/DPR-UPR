@@ -232,7 +232,11 @@ router.post('/:id/verify', requireRole('unit_head'), async (req, res, next) => {
 // Send to Purchase Head by email with PDF attached
 router.post('/:id/send', requireRole('unit_head'), async (req, res, next) => {
   try {
-    const upr = await Upr.findById(req.params.id).populate('unit', 'name city');
+    // smtpPass is select:false — pull it explicitly so the unit's own mailbox can send.
+    const upr = await Upr.findById(req.params.id).populate({
+      path: 'unit',
+      select: 'name city smtpUser +smtpPass',
+    });
     if (!upr) return res.status(404).json({ error: 'UPR not found' });
     if (!canAccessUpr(req.user, upr)) return res.status(403).json({ error: 'Forbidden' });
     if (upr.status !== 'verified') return res.status(409).json({ error: 'UPR must be verified first' });
@@ -249,6 +253,7 @@ router.post('/:id/send', requireRole('unit_head'), async (req, res, next) => {
         `Verified by: ${upr.verifiedSignName}\nItems: ${upr.lines.length}\n\n— CPH Requisition System`,
       attachmentPath: upr.pdfPath,
       attachmentName: `UPR-${upr.unit.name}-${upr.cycleDate}.pdf`,
+      unit: upr.unit,
     });
 
     upr.status = 'sent';
