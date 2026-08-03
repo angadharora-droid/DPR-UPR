@@ -1,4 +1,8 @@
-const BASE = '/api';
+// API host comes from the build environment when set (e.g. VITE_API_URL=
+// https://dprupr.centrepointgroup.in on Vercel); empty = same-origin /api,
+// which covers local dev (Vite proxy), the single Railway service, and the
+// vercel.json rewrite fallback.
+const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '') + '/api';
 
 export function getToken() {
   return localStorage.getItem('token');

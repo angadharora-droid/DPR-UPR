@@ -47,8 +47,9 @@ router.get('/items', async (req, res, next) => {
 });
 
 // Raw-material lookup for DPR entry — scoped to the caller's own unit
-// (admin passes unitId). Returns the catalog size plus the top name matches,
-// prefix matches ranked before substring matches.
+// (admin passes unitId). Multi-word queries AND every term ("chicken bone"
+// finds "Chicken Breast Boneless"); ranking: whole-query prefix, then all
+// terms on word starts, then plain substring.
 router.get('/raw-materials', async (req, res, next) => {
   try {
     const unitId = req.user.role === 'admin' ? req.query.unitId : req.user.unit;
@@ -56,17 +57,28 @@ router.get('/raw-materials', async (req, res, next) => {
     const total = await RawMaterial.countDocuments({ unit: unitId, active: true });
     const q = String(req.query.q || '').trim();
     if (!q) return res.json({ total, results: [] });
-    const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    const found = await RawMaterial.find({ unit: unitId, active: true, name: rx })
+    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const terms = q.split(/\s+/).filter(Boolean).map(esc);
+    const found = await RawMaterial.find({
+      unit: unitId,
+      active: true,
+      $and: terms.map((t) => ({ name: new RegExp(t, 'i') })),
+    })
       .sort({ name: 1 })
-      .limit(50)
+      .limit(75)
       .select('name uom category');
     const ql = q.toLowerCase();
-    const results = [
-      ...found.filter((m) => m.name.toLowerCase().startsWith(ql)),
-      ...found.filter((m) => !m.name.toLowerCase().startsWith(ql)),
-    ].slice(0, 20);
-    res.json({ total, results });
+    const score = (name) => {
+      if (name.toLowerCase().startsWith(ql)) return 0;
+      if (terms.every((t) => new RegExp(`\\b${t}`, 'i').test(name))) return 1;
+      return 2;
+    };
+    const results = found
+      .map((m) => ({ m, s: score(m.name) }))
+      .sort((a, b) => a.s - b.s || a.m.name.localeCompare(b.m.name))
+      .slice(0, 20)
+      .map((x) => x.m);
+    res.json({ total, results, more: found.length > 20 });
   } catch (err) {
     next(err);
   }

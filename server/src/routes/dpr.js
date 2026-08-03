@@ -3,6 +3,7 @@ import multer from 'multer';
 import Dpr from '../models/Dpr.js';
 import Upr from '../models/Upr.js';
 import Department from '../models/Department.js';
+import Category from '../models/Category.js';
 import MinMaxReport from '../models/MinMaxReport.js';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { logAudit } from '../services/audit.js';
@@ -142,18 +143,40 @@ router.put('/:id', requireRole('dept_head'), async (req, res, next) => {
 
     const { lines } = req.body;
     if (!Array.isArray(lines)) return res.status(400).json({ error: 'lines array required' });
-    dpr.lines = lines.map((l) => ({
-      category: l.category || null,
-      item: l.item || null,
-      itemNameOverride: l.itemNameOverride || '',
-      uom: l.uom || '',
-      closingStock: l.closingStock ?? null,
-      bufferDays: l.bufferDays ?? null,
-      minMaxSuggestedQty: l.minMaxSuggestedQty ?? null,
-      requiredQty: Number(l.requiredQty || 0),
-      remark: l.remark || '',
-      isManuallyAdded: !!l.isManuallyAdded,
-    }));
+
+    // Lines picked from the raw-material catalog arrive with a categoryName
+    // (the POS category text) instead of a category id — find-or-create that
+    // category in this department so UPR grouping and the PDF keep working.
+    const cats = await Category.find({ department: dpr.department });
+    const catByName = new Map(cats.map((c) => [c.name.trim().toLowerCase(), c]));
+    let maxSort = cats.reduce((m, c) => Math.max(m, c.sortOrder ?? 0), 0);
+    async function resolveCategory(l) {
+      if (l.category) return l.category;
+      const name = String(l.categoryName || '').trim();
+      if (!name || name.toLowerCase() === 'other') return null;
+      let cat = catByName.get(name.toLowerCase());
+      if (!cat) {
+        cat = await Category.create({ department: dpr.department, name, sortOrder: ++maxSort });
+        catByName.set(name.toLowerCase(), cat);
+      }
+      return cat._id;
+    }
+    const mapped = [];
+    for (const l of lines) {
+      mapped.push({
+        category: await resolveCategory(l),
+        item: l.item || null,
+        itemNameOverride: l.itemNameOverride || '',
+        uom: l.uom || '',
+        closingStock: l.closingStock ?? null,
+        bufferDays: l.bufferDays ?? null,
+        minMaxSuggestedQty: l.minMaxSuggestedQty ?? null,
+        requiredQty: Number(l.requiredQty || 0),
+        remark: l.remark || '',
+        isManuallyAdded: !!l.isManuallyAdded,
+      });
+    }
+    dpr.lines = mapped;
     await dpr.save();
     const populated = await Dpr.findById(dpr._id).populate('lines.category', 'name sortOrder');
     res.json(populated);
