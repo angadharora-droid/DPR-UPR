@@ -2,31 +2,29 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, downloadPdf } from '../api.js';
 import { useAuth } from '../AuthContext.jsx';
-import Layout, { StatusBadge, ErrorNote, Note, btn, inputCls } from '../components/Layout.jsx';
+import Layout, { StatusBadge, ErrorNote, Note, btn } from '../components/Layout.jsx';
 
 export default function UprSend() {
   const { id } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [upr, setUpr] = useState(null);
-  const [email, setEmail] = useState('');
+  const [target, setTarget] = useState(null); // { name, email } — the fixed Purchase Head recipient
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
 
   useEffect(() => {
-    api(`/upr/${id}`).then((u) => {
-      setUpr(u);
-      setEmail(u.sentToEmail || '');
-    }).catch((e) => setError(e.message));
+    api(`/upr/${id}`).then(setUpr).catch((e) => setError(e.message));
+    api('/upr/send-target').then(setTarget).catch(() => setTarget({ name: null, email: null }));
   }, [id]);
 
   async function send() {
-    if (!window.confirm(`Send this UPR to ${email || 'the configured Purchase Head email'}?`)) return;
+    if (!window.confirm(`Send this UPR to ${target?.email}?`)) return;
     setBusy(true);
     setError('');
     try {
-      const r = await api(`/upr/${id}/send`, { method: 'POST', body: email ? { email } : {} });
+      const r = await api(`/upr/${id}/send`, { method: 'POST', body: {} });
       setResult(r);
       setUpr((u) => ({ ...u, status: 'sent', sentToEmail: r.sentTo, sentAt: new Date().toISOString() }));
     } catch (e) {
@@ -87,14 +85,21 @@ export default function UprSend() {
           <h2 className="font-display text-base font-semibold mb-4">Send to Purchase Head</h2>
           {upr.status === 'verified' ? (
             <>
-              <label className="block text-sm text-ink-soft mb-1" htmlFor="ph-email">
-                Purchase Head email (leave blank to use the configured group Purchase Head)
-              </label>
-              <input id="ph-email" className={inputCls} type="email" value={email} placeholder="purchase@cph.local" onChange={(e) => setEmail(e.target.value)} />
+              <p className="text-sm text-ink-soft mb-1">Recipient (fixed for all UPRs)</p>
+              {target?.email ? (
+                <div className="rounded-lg border border-line bg-paper px-3.5 py-2.5">
+                  {target.name && <div className="text-sm font-medium">{target.name}</div>}
+                  <div className="text-sm text-ink-soft font-mono">{target.email}</div>
+                </div>
+              ) : (
+                <Note tone="warn">
+                  No Purchase Head email configured — ask the Admin to set the Purchase Head user's email.
+                </Note>
+              )}
               <p className="text-xs text-ink-faint mt-2 font-mono">
                 Subject: UPR — {upr.unit?.name} — {upr.cycleDate} · PDF attached
               </p>
-              <button className={btn('green') + ' mt-5 w-full py-2.5'} onClick={send} disabled={busy}>
+              <button className={btn('green') + ' mt-5 w-full py-2.5'} onClick={send} disabled={busy || !target?.email}>
                 {busy ? 'Sending…' : 'Send email with PDF'}
               </button>
             </>

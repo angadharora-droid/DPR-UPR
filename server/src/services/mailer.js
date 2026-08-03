@@ -18,8 +18,12 @@ function buildTransport(auth) {
   });
 }
 
+export async function getPurchaseHead() {
+  return User.findOne({ role: 'purchase_head', active: true }).sort({ createdAt: 1 });
+}
+
 export async function getPurchaseHeadEmail() {
-  const ph = await User.findOne({ role: 'purchase_head', active: true }).sort({ createdAt: 1 });
+  const ph = await getPurchaseHead();
   return ph?.email || process.env.PURCHASE_HEAD_EMAIL || null;
 }
 

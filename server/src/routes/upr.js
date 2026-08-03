@@ -7,7 +7,7 @@ import Category from '../models/Category.js';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { logAudit } from '../services/audit.js';
 import { generateUprPdf } from '../services/pdf.js';
-import { sendUprEmail, getPurchaseHeadEmail } from '../services/mailer.js';
+import { sendUprEmail, getPurchaseHead, getPurchaseHeadEmail } from '../services/mailer.js';
 import { todayCycle } from './dpr.js';
 
 const router = Router();
@@ -43,6 +43,20 @@ router.get('/dashboard', requireRole('unit_head'), async (req, res, next) => {
           hodSignDate: dpr?.hodSignDate || null,
         };
       }),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Who will receive sent UPRs — the active Purchase Head. Recipient is fixed
+// group-wide; the send route always resolves it fresh and ignores any override.
+router.get('/send-target', requireRole('unit_head', 'admin'), async (req, res, next) => {
+  try {
+    const ph = await getPurchaseHead();
+    res.json({
+      name: ph?.name || null,
+      email: ph?.email || process.env.PURCHASE_HEAD_EMAIL || null,
     });
   } catch (err) {
     next(err);
@@ -241,7 +255,9 @@ router.post('/:id/send', requireRole('unit_head'), async (req, res, next) => {
     if (!canAccessUpr(req.user, upr)) return res.status(403).json({ error: 'Forbidden' });
     if (upr.status !== 'verified') return res.status(409).json({ error: 'UPR must be verified first' });
 
-    const to = req.body.email || (await getPurchaseHeadEmail());
+    // The recipient is always the active Purchase Head — per-send overrides
+    // are not allowed so every UPR lands in the same mailbox.
+    const to = await getPurchaseHeadEmail();
     if (!to) return res.status(400).json({ error: 'No Purchase Head email configured' });
 
     const subject = `UPR — ${upr.unit.name} — ${upr.cycleDate}`;
