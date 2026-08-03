@@ -23,6 +23,10 @@ npm run dev                   # app on http://localhost:5173 (proxies /api to :5
 ```
 
 
+### API base URL
+
+The client calls the API at the same origin (`/api`) by default — right for local dev (Vite proxy), the single Railway service, and the Vercel rewrite in `client/vercel.json`. To point a client build at a different API host, set `VITE_API_URL` (e.g. `https://dprupr.centrepointgroup.in`) in the build environment (Vercel → Project → Environment Variables).
+
 ### Email
 
 With `SMTP_HOST` empty in `server/.env`, sending runs in **dev mode**: the send flow completes, the UPR is marked Sent, and the email (with PDF attachment) is logged on the server instead of delivered. Fill in the SMTP settings for real delivery. The recipient defaults to the active Purchase Head user's email (`PURCHASE_HEAD_EMAIL` is the fallback); the Unit Head can override it per send.
@@ -35,7 +39,7 @@ With `SMTP_HOST` empty in `server/.env`, sending runs in **dev mode**: the send 
 2. **Kitchen/Bar:** click **Import POS File** on the DPR screen and pick the min-max report exported from POS (Excel `.xlsx`/`.xls` or CSV). Rows load grouped by category with Required Qty defaulting to the POS suggestion (editable). Re-importing replaces POS rows but keeps manually added items; every import is archived as a min-max report. HouseKeeping has no feed and no import button — items are added manually under its category headers. Any department can add manual items. Sign & Submit locks the DPR.
    File format (header row required): `Category, Item, UOM, Closing Stock, Buffer Days, Required Qty`. Unknown items are auto-created as POS-linked; unknown categories are reported and skipped. Sample files to try: [sample-data/](sample-data/) (regenerate with `node src/makeSamples.js`).
    *(Admin → Min-Max Import still exists as an optional central archive of feeds; it does not feed DPRs.)*
-   **Raw-material autocomplete:** each unit can carry its own raw-material catalog — Admin → Units → **Raw materials** uploads the POS raw-material export/report (`.xlsx`/`.csv`; both the bare export and the printable report with title rows work). With a catalog loaded, manually added DPR items autocomplete: picking a suggestion fills the item name and UOM (purchase unit) and files the line under the DPR category whose name matches the material's POS category (case-insensitive; no match = the line stays where it was added / goes to Other). A **Quick add** search box on the DPR screen adds items without opening a category section first. Re-uploading replaces the unit's catalog; inactive and duplicate rows are skipped.
+   **Raw-material catalog & search-first entry:** each unit can carry its own raw-material catalog — Admin → Units → **Raw materials** uploads the POS raw-material export/report (`.xlsx`/`.csv`; both the bare export and the printable report with title rows work). With a catalog loaded the DPR screen becomes search-first: a search bar adds items (↑↓/Enter, term highlighting, multi-word matching), and each pick fills the item name and UOM (purchase unit) and files the line under the material's POS category automatically — categories come from the Excel and are auto-created in the department's master on save, so empty category sections are never shown. Items not in the catalog can still be added manually (they go to Other). Re-uploading replaces the unit's catalog; inactive and duplicate rows are skipped.
 3. **Unit Head** sees per-department status, can send a DPR back for re-edit, and consolidates submitted DPRs into one UPR. Quantity/remark edits, additions, and removals are audit-logged against the department head's original values. **Verify & Lock** signs the UPR and generates the PDF.
 4. **Send** emails the PDF to the Purchase Head (`UPR — <unit> — <date>` subject) and locks the cycle. The PDF stays downloadable from History and the Purchase portal.
 
