@@ -9,7 +9,7 @@ const ROLE_OPTIONS = [
   ['admin', 'Admin'],
 ];
 
-const EMPTY = { name: '', email: '', phone: '', role: 'dept_head', unitId: '', departmentId: '', password: '' };
+const EMPTY = { name: '', email: '', loginId: '', phone: '', role: 'dept_head', unitId: '', departmentId: '', password: '' };
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
@@ -71,6 +71,7 @@ export default function AdminUsers() {
     setForm({
       name: u.name,
       email: u.email,
+      loginId: u.loginId || '',
       phone: u.phone || '',
       role: u.role,
       unitId: u.unit?._id || '',
@@ -97,6 +98,10 @@ export default function AdminUsers() {
             <div>
               <label className="block text-xs text-ink-soft mb-1">Email</label>
               <input className={inputCls} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </div>
+            <div>
+              <label className="block text-xs text-ink-soft mb-1">Login ID (optional — signs in instead of email)</label>
+              <input className={inputCls} value={form.loginId} onChange={(e) => setForm({ ...form, loginId: e.target.value })} placeholder="e.g. kitchen.pablo" />
             </div>
             <div>
               <label className="block text-xs text-ink-soft mb-1">Phone</label>
@@ -156,6 +161,7 @@ export default function AdminUsers() {
             <tr>
               <th>Name</th>
               <th>Email</th>
+              <th>Login ID</th>
               <th>Role</th>
               <th>Unit / dept</th>
               <th>Last login</th>
@@ -168,6 +174,7 @@ export default function AdminUsers() {
               <tr key={u._id}>
                 <td className="font-medium">{u.name}</td>
                 <td className="text-ink-soft">{u.email}</td>
+                <td className="text-ink-soft font-mono text-xs">{u.loginId || '—'}</td>
                 <td>{ROLE_OPTIONS.find(([v]) => v === u.role)?.[1] || u.role}</td>
                 <td className="text-ink-soft">
                   {u.unit?.name || '—'}{u.department?.name ? ` / ${u.department.name}` : ''}

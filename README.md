@@ -24,14 +24,16 @@ npm run dev                   # app on http://localhost:5173 (proxies /api to :5
 
 ### Demo logins (seeded)
 
-| Login | Password | Role |
-|---|---|---|
-| admin@cph.local | admin123 | Admin (all units) |
-| unithead.pablo@cph.local | unit123 | Unit Head — pablo |
-| kitchen.pablo@cph.local | kitchen123 | Dept Head — Main Kitchen |
-| bar.pablo@cph.local | bar123 | Dept Head — Bar |
-| hk.pablo@cph.local | hk123 | Dept Head — HouseKeeping & Maintenance |
-| purchase@cph.local | purchase123 | Purchase Head (read-only portal) |
+Sign in with either the local login ID or the email — both work with the same password. Admin → Users sets the optional login ID per user.
+
+| Login ID | Email | Password | Role |
+|---|---|---|---|
+| admin | admin@cph.local | admin123 | Admin (all units) |
+| unithead.pablo | unithead.pablo@cph.local | unit123 | Unit Head — pablo |
+| kitchen.pablo | kitchen.pablo@cph.local | kitchen123 | Dept Head — Main Kitchen |
+| bar.pablo | bar.pablo@cph.local | bar123 | Dept Head — Bar |
+| hk.pablo | hk.pablo@cph.local | hk123 | Dept Head — HouseKeeping & Maintenance |
+| purchase | purchase@cph.local | purchase123 | Purchase Head (read-only portal) |
 
 ### Email
 

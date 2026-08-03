@@ -12,7 +12,7 @@ const STEPS = [
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -22,7 +22,7 @@ export default function Login() {
     setError('');
     setBusy(true);
     try {
-      const user = await login(email, password);
+      const user = await login(loginId, password);
       navigate(homeFor(user), { replace: true });
     } catch (err) {
       setError(err.message);
@@ -67,8 +67,8 @@ export default function Login() {
           <h2 className="text-2xl font-semibold tracking-tight mb-1">Welcome back</h2>
           <p className="text-sm text-ink-soft mb-6">Sign in with the account your admin set up.</p>
           <ErrorNote error={error} />
-          <label className="block text-sm font-medium mb-1.5" htmlFor="email">Email</label>
-          <input id="email" className={inputCls + ' mb-4 py-2'} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus autoComplete="username" />
+          <label className="block text-sm font-medium mb-1.5" htmlFor="loginId">Login ID or email</label>
+          <input id="loginId" className={inputCls + ' mb-4 py-2'} type="text" value={loginId} onChange={(e) => setLoginId(e.target.value)} required autoFocus autoComplete="username" />
           <label className="block text-sm font-medium mb-1.5" htmlFor="password">Password</label>
           <input id="password" className={inputCls + ' mb-6 py-2'} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
           <button className={btn('green') + ' w-full py-2.5'} disabled={busy}>
