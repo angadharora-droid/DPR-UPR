@@ -29,7 +29,7 @@ The client calls the API at the same origin (`/api`) by default — right for lo
 
 ### Email
 
-With `SMTP_HOST` empty in `server/.env`, sending runs in **dev mode**: the send flow completes, the UPR is marked Sent, and the email (with PDF attachment) is logged on the server instead of delivered. Fill in the SMTP settings for real delivery. The recipient defaults to the active Purchase Head user's email (`PURCHASE_HEAD_EMAIL` is the fallback); the Unit Head can override it per send.
+With `SMTP_HOST` empty in `server/.env`, sending runs in **dev mode**: the send flow completes, the UPR is marked Sent, and the email (with PDF attachment) is logged on the server instead of delivered. Fill in the SMTP settings for real delivery. The recipient is **always** the active Purchase Head user's email (`PURCHASE_HEAD_EMAIL` is the env fallback) — it is shown read-only on the send screen and cannot be overridden per send, so every UPR lands in the same mailbox. To change it, update the Purchase Head user's email in Admin → Users.
 
 **Per-unit sender:** each unit can send from its own mailbox — Admin → Units → **Mailbox** sets the unit's sender email + password (host/port stay the global `SMTP_HOST`/`SMTP_PORT`). Units without a mailbox fall back to the group `SMTP_USER`/`MAIL_FROM`. The mailbox password is write-only: it is never returned by the API nor written to audit logs.
 
