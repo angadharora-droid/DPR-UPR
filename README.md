@@ -27,6 +27,8 @@ npm run dev                   # app on http://localhost:5173 (proxies /api to :5
 
 With `SMTP_HOST` empty in `server/.env`, sending runs in **dev mode**: the send flow completes, the UPR is marked Sent, and the email (with PDF attachment) is logged on the server instead of delivered. Fill in the SMTP settings for real delivery. The recipient defaults to the active Purchase Head user's email (`PURCHASE_HEAD_EMAIL` is the fallback); the Unit Head can override it per send.
 
+**Per-unit sender:** each unit can send from its own mailbox — Admin → Units → **Mailbox** sets the unit's sender email + password (host/port stay the global `SMTP_HOST`/`SMTP_PORT`). Units without a mailbox fall back to the group `SMTP_USER`/`MAIL_FROM`. The mailbox password is write-only: it is never returned by the API nor written to audit logs.
+
 ## Daily workflow
 
 1. **Department Head** creates today's DPR — it always starts **blank**.

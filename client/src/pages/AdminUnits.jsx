@@ -6,6 +6,7 @@ export default function AdminUnits() {
   const [units, setUnits] = useState([]);
   const [error, setError] = useState('');
   const [form, setForm] = useState(null);
+  const [mailForm, setMailForm] = useState(null);
   const [busy, setBusy] = useState(false);
 
   function load() {
@@ -19,6 +20,23 @@ export default function AdminUnits() {
     try {
       await api('/admin/units', { method: 'POST', body: form });
       setForm(null);
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveMailbox() {
+    setBusy(true);
+    setError('');
+    try {
+      const smtpUser = mailForm.smtpUser.trim();
+      const body = { smtpUser };
+      if (mailForm.smtpPass) body.smtpPass = mailForm.smtpPass;
+      await api(`/admin/units/${mailForm.unit._id}`, { method: 'PUT', body });
+      setMailForm(null);
       load();
     } catch (e) {
       setError(e.message);
@@ -68,12 +86,30 @@ export default function AdminUnits() {
           </div>
         </div>
       )}
+      {mailForm && (
+        <div className="card p-4 mb-4 grid md:grid-cols-4 gap-3 items-end">
+          <div>
+            <label className="block text-xs text-ink-soft mb-1">Sender mailbox for {mailForm.unit.name}</label>
+            <input className={inputCls} placeholder="e.g. pablo@centrepointgroup.in" value={mailForm.smtpUser} onChange={(e) => setMailForm({ ...mailForm, smtpUser: e.target.value })} />
+          </div>
+          <div>
+            <label className="block text-xs text-ink-soft mb-1">Mailbox password {mailForm.unit.smtpUser ? '(blank = keep current)' : ''}</label>
+            <input className={inputCls} type="password" value={mailForm.smtpPass} onChange={(e) => setMailForm({ ...mailForm, smtpPass: e.target.value })} />
+          </div>
+          <div className="md:col-span-2 flex gap-2">
+            <button className={btn('green')} onClick={saveMailbox} disabled={busy || (!!mailForm.smtpUser.trim() && !mailForm.smtpPass && !mailForm.unit.smtpUser)}>Save mailbox</button>
+            <button className={btn('subtle')} onClick={() => setMailForm(null)}>Cancel</button>
+            <span className="text-xs text-ink-faint self-center">Leave email empty to fall back to the group mailbox.</span>
+          </div>
+        </div>
+      )}
       <div className="card overflow-hidden">
         <table className="tbl">
           <thead>
             <tr>
               <th>Name</th>
               <th>City</th>
+              <th>Sender mailbox</th>
               <th>Status</th>
               <th className="text-right">Actions</th>
             </tr>
@@ -83,17 +119,21 @@ export default function AdminUnits() {
               <tr key={u._id}>
                 <td className="font-medium">{u.name}</td>
                 <td className="text-ink-soft">{u.city}</td>
+                <td className="text-ink-soft">{u.smtpUser || <span className="text-ink-faint">Group default</span>}</td>
                 <td>
                   <span className={`stamp ${u.active ? 'stamp-ok' : 'stamp-neutral'}`}>{u.active ? 'Active' : 'Inactive'}</span>
                 </td>
                 <td className="text-right">
+                  <button className={btn('subtle') + ' px-2.5 py-1 text-xs mr-1'} onClick={() => setMailForm({ unit: u, smtpUser: u.smtpUser || '', smtpPass: '' })}>
+                    Mailbox
+                  </button>
                   <button className={btn('subtle') + ' px-2.5 py-1 text-xs'} onClick={() => toggleActive(u)}>
                     {u.active ? 'Deactivate' : 'Activate'}
                   </button>
                 </td>
               </tr>
             ))}
-            {!units.length && <tr><td colSpan={4} className="text-center text-ink-faint py-8">No units yet — add the first cafe above.</td></tr>}
+            {!units.length && <tr><td colSpan={5} className="text-center text-ink-faint py-8">No units yet — add the first cafe above.</td></tr>}
           </tbody>
         </table>
       </div>

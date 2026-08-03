@@ -65,14 +65,26 @@ router.put('/:id', async (req, res, next) => {
   try {
     const unit = await Unit.findById(req.params.id);
     if (!unit) return res.status(404).json({ error: 'Unit not found' });
-    const old = { name: unit.name, city: unit.city, active: unit.active };
-    const { name, city, active } = req.body;
+    const old = { name: unit.name, city: unit.city, active: unit.active, smtpUser: unit.smtpUser };
+    const { name, city, active, smtpUser, smtpPass } = req.body;
     if (name !== undefined) unit.name = name;
     if (city !== undefined) unit.city = city;
     if (active !== undefined) unit.active = active;
+    if (smtpUser !== undefined) {
+      unit.smtpUser = String(smtpUser).trim().toLowerCase();
+      if (!unit.smtpUser) unit.smtpPass = '';
+    }
+    if (smtpPass) unit.smtpPass = smtpPass;
     await unit.save();
-    await logAudit({ entityType: 'unit', entityId: unit._id, action: 'update', changedBy: req.user._id, oldValue: old, newValue: req.body });
-    res.json(unit);
+    // The mailbox password never goes to the audit log or back out over the API.
+    await logAudit({
+      entityType: 'unit', entityId: unit._id, action: 'update', changedBy: req.user._id,
+      oldValue: old,
+      newValue: { name, city, active, smtpUser: unit.smtpUser, smtpPass: smtpPass ? '(updated)' : undefined },
+    });
+    const out = unit.toObject();
+    delete out.smtpPass;
+    res.json(out);
   } catch (err) {
     next(err);
   }

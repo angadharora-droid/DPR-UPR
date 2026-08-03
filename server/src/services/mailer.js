@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import User from '../models/User.js';
 
-function buildTransport() {
+function buildTransport(auth) {
   if (!process.env.SMTP_HOST) {
     // Dev mode: no SMTP configured — emails are rendered to JSON and logged.
     return nodemailer.createTransport({ jsonTransport: true });
@@ -10,9 +10,11 @@ function buildTransport() {
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
     secure: process.env.SMTP_SECURE === 'true',
-    auth: process.env.SMTP_USER
-      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-      : undefined,
+    auth:
+      auth ||
+      (process.env.SMTP_USER
+        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+        : undefined),
   });
 }
 
@@ -21,10 +23,17 @@ export async function getPurchaseHeadEmail() {
   return ph?.email || process.env.PURCHASE_HEAD_EMAIL || null;
 }
 
-export async function sendUprEmail({ to, subject, text, attachmentPath, attachmentName }) {
-  const transport = buildTransport();
+// When the unit has its own mailbox configured (Admin → Units), authenticate and
+// send as that mailbox — the From must match the authenticated user on most hosts.
+export async function sendUprEmail({ to, subject, text, attachmentPath, attachmentName, unit }) {
+  const unitAuth =
+    unit?.smtpUser && unit?.smtpPass ? { user: unit.smtpUser, pass: unit.smtpPass } : null;
+  const transport = buildTransport(unitAuth);
+  const from = unitAuth
+    ? { name: `CPH Requisitions — ${unit.name}`, address: unit.smtpUser }
+    : process.env.MAIL_FROM || 'no-reply@cph.local';
   const info = await transport.sendMail({
-    from: process.env.MAIL_FROM || 'no-reply@cph.local',
+    from,
     to,
     subject,
     text,
