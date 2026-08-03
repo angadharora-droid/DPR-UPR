@@ -6,6 +6,7 @@ import DprEntry from './pages/DprEntry.jsx';
 import UnitDashboard from './pages/UnitDashboard.jsx';
 import UprReview from './pages/UprReview.jsx';
 import UprSend from './pages/UprSend.jsx';
+import UnitReports from './pages/UnitReports.jsx';
 import AdminOverview from './pages/AdminOverview.jsx';
 import AdminUnits from './pages/AdminUnits.jsx';
 import AdminUsers from './pages/AdminUsers.jsx';
@@ -33,6 +34,7 @@ export default function App() {
       <Route path="/unit" element={<Protected roles={['unit_head']}><UnitDashboard /></Protected>} />
       <Route path="/unit/upr" element={<Protected roles={['unit_head']}><UprReview /></Protected>} />
       <Route path="/unit/upr/:id/send" element={<Protected roles={['unit_head']}><UprSend /></Protected>} />
+      <Route path="/unit/reports" element={<Protected roles={['unit_head']}><UnitReports /></Protected>} />
 
       <Route path="/admin" element={<Protected roles={['admin']}><AdminOverview /></Protected>} />
       <Route path="/admin/units" element={<Protected roles={['admin']}><AdminUnits /></Protected>} />
