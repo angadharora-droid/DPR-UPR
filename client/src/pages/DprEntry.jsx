@@ -68,6 +68,8 @@ export default function DprEntry() {
   const searchSeq = useRef(0);
   const addedTimer = useRef(null);
   const dropRef = useRef(null);
+  // After a pick, focus jumps to the field that matters next: { idx, field }.
+  const focusRef = useRef(null);
 
   // The dropdown is positioned from the input's rect at keystroke time; if the
   // page scrolls or resizes underneath it, close instead of drifting.
@@ -252,12 +254,14 @@ export default function DprEntry() {
       })
     );
     if (catName) setCollapsed((c) => ({ ...c, [catName.toLowerCase()]: false }));
+    focusRef.current = { idx, field: 'qty' };
     closeSuggest();
     setDirty(true);
   }
 
   function quickAddPick(rm) {
     const catName = String(rm.category || '').trim();
+    focusRef.current = { idx: lines.length, field: 'qty' };
     setLines((prev) => [
       ...prev,
       {
@@ -276,6 +280,7 @@ export default function DprEntry() {
   }
 
   function addManualLine(name) {
+    focusRef.current = { idx: lines.length, field: name ? 'qty' : 'name' };
     setLines((prev) => [...prev, { ...blankLine(), itemNameOverride: name || '' }]);
     setCollapsed((c) => ({ ...c, other: false }));
     setQuickAdd('');
@@ -549,7 +554,8 @@ export default function DprEntry() {
             )}
           </div>
           <p className="mt-1.5 text-[11px] text-ink-faint">
-            ↑↓ to choose, Enter to add — the item lands under its own category with the right UOM automatically.
+            ↑↓ to choose, Enter to add — the item lands under its own category with the right UOM, and the cursor
+            jumps to its Required qty. Enter there brings you back here.
           </p>
           {addedNote && (
             <p className="mt-1 text-xs text-ok">
@@ -578,17 +584,25 @@ export default function DprEntry() {
               </svg>
             </span>
           </button>
-          {!collapsed[cat.id] && (
+          {!collapsed[cat.id] && (() => {
+            // POS columns only earn their space when a line in this section
+            // actually carries min-max data; catalog picks show the fields
+            // that matter — item, UOM, required qty, remark.
+            const showStock =
+              !catalogMode ||
+              cat.lines.some((l) => l.closingStock != null || l.bufferDays != null || l.minMaxSuggestedQty != null);
+            const cols = 5 + (showStock ? 2 : 0) + (showStock && showMinMax ? 1 : 0) + (editable ? 1 : 0);
+            return (
             <div className="overflow-x-auto">
               <table className="tbl tbl-dense">
                 <thead>
                   <tr>
                     <th className="w-8">#</th>
                     <th className="min-w-44">Item</th>
-                    <th className="w-20">UOM</th>
-                    <th className="w-24 text-right">Closing stock</th>
-                    <th className="w-24 text-right">Buffer days</th>
-                    {showMinMax && <th className="w-24 text-right">Suggested</th>}
+                    <th className="w-28">UOM</th>
+                    {showStock && <th className="w-24 text-right">Closing stock</th>}
+                    {showStock && <th className="w-24 text-right">Buffer days</th>}
+                    {showStock && showMinMax && <th className="w-24 text-right">Suggested</th>}
                     <th className="w-28 text-right">Required qty</th>
                     <th className="min-w-36">Remark</th>
                     {editable && <th className="w-10"></th>}
@@ -604,6 +618,12 @@ export default function DprEntry() {
                             className={inputCls}
                             value={l.itemNameOverride}
                             placeholder={rmTotal ? 'Type to search catalog' : 'Item name'}
+                            ref={(el) => {
+                              if (el && focusRef.current?.idx === l.idx && focusRef.current.field === 'name') {
+                                focusRef.current = null;
+                                el.focus();
+                              }
+                            }}
                             onChange={(e) => {
                               updateLine(l.idx, 'itemNameOverride', e.target.value);
                               searchRawMaterials(`line-${l.idx}`, e.target.value, e.target.getBoundingClientRect());
@@ -620,23 +640,36 @@ export default function DprEntry() {
                       </td>
                       <td className="text-ink-soft">
                         {l.isManuallyAdded && editable ? (
-                          <input className={inputCls} value={l.uom} placeholder="kg / pc" onChange={(e) => updateLine(l.idx, 'uom', e.target.value)} />
+                          <input className={inputCls} value={l.uom} title={l.uom} placeholder="kg / pc" onChange={(e) => updateLine(l.idx, 'uom', e.target.value)} />
                         ) : (
-                          l.uom
+                          <span className="whitespace-nowrap" title={l.uom}>{l.uom}</span>
                         )}
                       </td>
-                      <td className="num text-ink-soft">{l.closingStock ?? '—'}</td>
-                      <td className="num text-ink-soft">{l.bufferDays ?? '—'}</td>
-                      {showMinMax && <td className="num text-ink-soft">{l.minMaxSuggestedQty ?? '—'}</td>}
+                      {showStock && <td className="num text-ink-soft">{l.closingStock ?? '—'}</td>}
+                      {showStock && <td className="num text-ink-soft">{l.bufferDays ?? '—'}</td>}
+                      {showStock && showMinMax && <td className="num text-ink-soft">{l.minMaxSuggestedQty ?? '—'}</td>}
                       <td className="num">
                         {editable ? (
                           <input
                             type="number"
                             min="0"
-                            className={inputCls + ' num'}
+                            className={inputCls + ' num font-medium'}
                             value={l.requiredQty}
                             aria-label={`Required quantity for ${l.itemNameOverride || 'item'}`}
+                            ref={(el) => {
+                              if (el && focusRef.current?.idx === l.idx && focusRef.current.field === 'qty') {
+                                focusRef.current = null;
+                                el.focus();
+                                el.select();
+                              }
+                            }}
                             onChange={(e) => updateLine(l.idx, 'requiredQty', e.target.value === '' ? 0 : Number(e.target.value))}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && catalogMode) {
+                                e.preventDefault();
+                                document.getElementById('rm-search')?.focus();
+                              }
+                            }}
                           />
                         ) : (
                           <span className="font-medium">{l.requiredQty}</span>
@@ -666,7 +699,7 @@ export default function DprEntry() {
                   ))}
                   {!cat.lines.length && (
                     <tr>
-                      <td colSpan={showMinMax ? 9 : 8} className="text-center text-ink-faint text-xs py-4">
+                      <td colSpan={cols} className="text-center text-ink-faint text-xs py-4">
                         No items in {cat.name} yet
                       </td>
                     </tr>
@@ -681,7 +714,8 @@ export default function DprEntry() {
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
         </section>
       ))}
     </Layout>
