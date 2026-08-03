@@ -669,8 +669,36 @@ export default function DprEntry() {
                           <span className="whitespace-nowrap" title={l.uom}>{l.uom}</span>
                         )}
                       </td>
-                      <td className="num text-ink-soft">{l.closingStock ?? '—'}</td>
-                      <td className="num text-ink-soft">{l.bufferDays ?? '—'}</td>
+                      <td className="num text-ink-soft">
+                        {editable ? (
+                          <input
+                            type="number"
+                            min="0"
+                            className={inputCls + ' num'}
+                            value={l.closingStock ?? ''}
+                            placeholder="—"
+                            aria-label={`Closing stock for ${l.itemNameOverride || 'item'}`}
+                            onChange={(e) => updateLine(l.idx, 'closingStock', e.target.value === '' ? null : Number(e.target.value))}
+                          />
+                        ) : (
+                          l.closingStock ?? '—'
+                        )}
+                      </td>
+                      <td className="num text-ink-soft">
+                        {editable ? (
+                          <input
+                            type="number"
+                            min="0"
+                            className={inputCls + ' num'}
+                            value={l.bufferDays ?? ''}
+                            placeholder="—"
+                            aria-label={`Buffer days for ${l.itemNameOverride || 'item'}`}
+                            onChange={(e) => updateLine(l.idx, 'bufferDays', e.target.value === '' ? null : Number(e.target.value))}
+                          />
+                        ) : (
+                          l.bufferDays ?? '—'
+                        )}
+                      </td>
                       {showMinMax && <td className="num text-ink-soft">{l.minMaxSuggestedQty ?? '—'}</td>}
                       <td className="num">
                         {editable ? (
