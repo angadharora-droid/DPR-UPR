@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import Layout, { ErrorNote, Note, btn, inputCls } from '../components/Layout.jsx';
 
@@ -9,6 +9,8 @@ export default function AdminUnits() {
   const [mailForm, setMailForm] = useState(null);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const rmFileRef = useRef(null);
+  const rmTarget = useRef(null);
 
   function load() {
     api('/admin/units').then(setUnits).catch((e) => setError(e.message));
@@ -64,6 +66,36 @@ export default function AdminUnits() {
     }
   }
 
+  function pickRawMaterials(u) {
+    rmTarget.current = u;
+    rmFileRef.current?.click();
+  }
+
+  async function uploadRawMaterials(file) {
+    const u = rmTarget.current;
+    if (!file || !u) return;
+    setBusy(true);
+    setError('');
+    setNote('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const r = await api(`/admin/units/${u._id}/raw-materials`, { method: 'POST', formData: fd });
+      setNote(
+        `${u.name}: imported ${r.imported} raw material(s)` +
+          (r.skippedInactive ? `, ${r.skippedInactive} inactive skipped` : '') +
+          (r.duplicates ? `, ${r.duplicates} duplicate(s) ignored` : '') +
+          '. Department heads now get item name, UOM and category suggestions on DPR entry.'
+      );
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+      if (rmFileRef.current) rmFileRef.current.value = '';
+    }
+  }
+
   async function toggleActive(u) {
     try {
       await api(`/admin/units/${u._id}`, { method: 'PUT', body: { active: !u.active } });
@@ -81,6 +113,13 @@ export default function AdminUnits() {
     >
       <ErrorNote error={error} />
       {note && <Note tone="ok">{note}</Note>}
+      <input
+        ref={rmFileRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        className="hidden"
+        onChange={(e) => uploadRawMaterials(e.target.files[0])}
+      />
       {form && (
         <div className="card p-4 mb-4 grid md:grid-cols-4 gap-3 items-end">
           <div>
@@ -130,6 +169,7 @@ export default function AdminUnits() {
               <th>Name</th>
               <th>City</th>
               <th>Sender mailbox</th>
+              <th>Raw materials</th>
               <th>Status</th>
               <th className="text-right">Actions</th>
             </tr>
@@ -140,10 +180,25 @@ export default function AdminUnits() {
                 <td className="font-medium">{u.name}</td>
                 <td className="text-ink-soft">{u.city}</td>
                 <td className="text-ink-soft">{u.smtpUser || <span className="text-ink-faint">Group default</span>}</td>
+                <td className="text-ink-soft">
+                  {u.rawMaterialCount ? (
+                    <span title={u.rawMaterialsSource}>
+                      {u.rawMaterialCount.toLocaleString()} items
+                      {u.rawMaterialsUpdatedAt && (
+                        <span className="text-ink-faint text-xs"> · {new Date(u.rawMaterialsUpdatedAt).toLocaleDateString()}</span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-ink-faint">None</span>
+                  )}
+                </td>
                 <td>
                   <span className={`stamp ${u.active ? 'stamp-ok' : 'stamp-neutral'}`}>{u.active ? 'Active' : 'Inactive'}</span>
                 </td>
                 <td className="text-right">
+                  <button className={btn('subtle') + ' px-2.5 py-1 text-xs mr-1'} onClick={() => pickRawMaterials(u)} disabled={busy} title="Upload the POS raw-material export/report (.xlsx/.csv) — replaces the unit's current catalog">
+                    Raw materials
+                  </button>
                   <button className={btn('subtle') + ' px-2.5 py-1 text-xs mr-1'} onClick={() => setMailForm({ unit: u, smtpUser: u.smtpUser || '', smtpPass: '' })}>
                     Mailbox
                   </button>
@@ -156,7 +211,7 @@ export default function AdminUnits() {
                 </td>
               </tr>
             ))}
-            {!units.length && <tr><td colSpan={5} className="text-center text-ink-faint py-8">No units yet — add the first cafe above.</td></tr>}
+            {!units.length && <tr><td colSpan={6} className="text-center text-ink-faint py-8">No units yet — add the first cafe above.</td></tr>}
           </tbody>
         </table>
       </div>

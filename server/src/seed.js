@@ -5,6 +5,7 @@ import Unit from './models/Unit.js';
 import Department from './models/Department.js';
 import Category from './models/Category.js';
 import Item from './models/Item.js';
+import RawMaterial from './models/RawMaterial.js';
 import User from './models/User.js';
 import MinMaxReport from './models/MinMaxReport.js';
 import Dpr from './models/Dpr.js';
@@ -22,7 +23,7 @@ async function main() {
   const wipe = process.argv.includes('--fresh');
   if (wipe) {
     await Promise.all(
-      [Unit, Department, Category, Item, User, MinMaxReport, Dpr, Upr, AuditLog].map((m) => m.deleteMany({}))
+      [Unit, Department, Category, Item, RawMaterial, User, MinMaxReport, Dpr, Upr, AuditLog].map((m) => m.deleteMany({}))
     );
     console.log('Wiped existing data');
   }
