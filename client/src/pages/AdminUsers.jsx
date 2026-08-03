@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api.js';
 import Layout, { ErrorNote, btn, inputCls } from '../components/Layout.jsx';
 
@@ -35,6 +35,36 @@ export default function AdminUsers() {
   }, [form?.unitId, form?.role]);
 
   const needsUnit = form && (form.role === 'dept_head' || form.role === 'unit_head');
+
+  // The UPR recipient: the oldest active Purchase Head user — same rule the
+  // server uses when it resolves the send address.
+  const purchaseHead = useMemo(() => {
+    const phs = users.filter((u) => u.role === 'purchase_head' && u.active);
+    phs.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    return phs[0] || null;
+  }, [users]);
+  const [phEmail, setPhEmail] = useState('');
+  const [phNote, setPhNote] = useState('');
+  useEffect(() => {
+    setPhEmail(purchaseHead?.email || '');
+  }, [purchaseHead?._id, purchaseHead?.email]);
+
+  async function savePhEmail() {
+    const email = phEmail.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(email)) return setError('Enter a valid email address');
+    setBusy(true);
+    setError('');
+    setPhNote('');
+    try {
+      await api(`/admin/users/${purchaseHead._id}`, { method: 'PUT', body: { email } });
+      setPhNote(`Saved — every UPR is now emailed to ${email}.`);
+      load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function save() {
     setBusy(true);
@@ -87,6 +117,46 @@ export default function AdminUsers() {
       actions={<button className={btn('green')} onClick={() => { setForm({ ...EMPTY }); setEditingId(null); }}>+ Add user</button>}
     >
       <ErrorNote error={error} />
+
+      <div className="card p-4 mb-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display text-base font-semibold">UPR recipient — Purchase Head</h2>
+            <p className="text-xs text-ink-faint mt-0.5">
+              Every unit's UPR email goes to this address only. Change it here.
+            </p>
+          </div>
+          {purchaseHead ? (
+            <div className="flex flex-wrap items-end gap-2">
+              <div>
+                <label className="block text-xs text-ink-soft mb-1" htmlFor="ph-recipient">
+                  {purchaseHead.name}
+                </label>
+                <input
+                  id="ph-recipient"
+                  className={inputCls + ' md:w-80'}
+                  type="email"
+                  value={phEmail}
+                  onChange={(e) => setPhEmail(e.target.value)}
+                />
+              </div>
+              <button
+                className={btn('green')}
+                onClick={savePhEmail}
+                disabled={busy || !phEmail.trim() || phEmail.trim().toLowerCase() === purchaseHead.email}
+              >
+                Save email
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm text-ink-soft">
+              No active Purchase Head user — add one below with role “Purchase Head”.
+            </p>
+          )}
+        </div>
+        {phNote && <p className="text-xs text-ok mt-2">{phNote}</p>}
+      </div>
+
       {form && (
         <div className="card p-4 mb-4">
           <h2 className="font-display text-base font-semibold mb-3">{editingId ? 'Edit user' : 'New user'}</h2>
