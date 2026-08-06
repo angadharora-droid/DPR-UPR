@@ -42,7 +42,7 @@ router.get('/overview', requireRole('admin', 'purchase_head'), async (req, res, 
       Dpr.find({ cycleDate }).select('unit department status'),
       Upr.find({ cycleDate }).select('unit status sentAt sentToEmail'),
     ]);
-    const dprKey = new Map(dprs.map((d) => [`${d.unit}:${d.department}`, d.status]));
+    const dprKey = new Map(dprs.map((d) => [`${d.unit}:${d.department}`, d]));
     const uprByUnit = new Map(uprs.map((u) => [String(u.unit), u]));
     res.json({
       cycleDate,
@@ -52,7 +52,10 @@ router.get('/overview', requireRole('admin', 'purchase_head'), async (req, res, 
         city: u.city,
         departments: departments
           .filter((d) => String(d.unit) === String(u._id))
-          .map((d) => ({ name: d.name, dprStatus: dprKey.get(`${u._id}:${d._id}`) || 'pending' })),
+          .map((d) => {
+            const dpr = dprKey.get(`${u._id}:${d._id}`);
+            return { name: d.name, dprStatus: dpr?.status || 'pending', dprId: dpr?._id || null };
+          }),
         uprStatus: uprByUnit.get(String(u._id))?.status || 'pending',
         uprSentAt: uprByUnit.get(String(u._id))?.sentAt || null,
       })),

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import Layout, { StatusBadge, ErrorNote, EmptyState, Stat } from '../components/Layout.jsx';
 
 export default function AdminOverview() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
@@ -43,7 +45,17 @@ export default function AdminOverview() {
                 {u.departments.map((d) => (
                   <tr key={d.name} className="border-t border-line-soft">
                     <td className="py-2">{d.name}</td>
-                    <td className="py-2 text-right"><StatusBadge status={d.dprStatus} /></td>
+                    <td className="py-2 text-right">
+                      {d.dprId && (
+                        <button
+                          className="text-brand-deep text-xs underline underline-offset-2 hover:text-brand mr-2.5"
+                          onClick={() => navigate(`/dept/dpr/${d.dprId}`)}
+                        >
+                          view DPR
+                        </button>
+                      )}
+                      <StatusBadge status={d.dprStatus} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
