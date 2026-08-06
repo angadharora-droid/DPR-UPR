@@ -11,6 +11,12 @@ const ROLE_OPTIONS = [
 
 const EMPTY = { name: '', email: '', loginId: '', phone: '', role: 'dept_head', unitId: '', departmentId: '', password: '' };
 
+// Mirrors the server rule: admins may use a 4/6-digit PIN, others need 8+ chars.
+function passwordOk(role, pw) {
+  if (role === 'admin') return /^\d{4}$/.test(pw) || /^\d{6}$/.test(pw) || pw.length >= 8;
+  return pw.length >= 8;
+}
+
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
   const [units, setUnits] = useState([]);
@@ -174,8 +180,10 @@ export default function AdminUsers() {
               <input className={inputCls} value={form.loginId} onChange={(e) => setForm({ ...form, loginId: e.target.value })} placeholder="e.g. kitchen.pablo" />
             </div>
             <div>
-              <label className="block text-xs text-ink-soft mb-1">Phone</label>
-              <input className={inputCls} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <label className="block text-xs text-ink-soft mb-1">
+                Phone{form.role === 'admin' ? ' (admins can sign in with this number)' : ''}
+              </label>
+              <input className={inputCls} type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="e.g. +91 98765 43210" />
             </div>
             <div>
               <label className="block text-xs text-ink-soft mb-1">Role</label>
@@ -210,13 +218,16 @@ export default function AdminUsers() {
             <div>
               <label className="block text-xs text-ink-soft mb-1">{editingId ? 'New password (blank = keep)' : 'Password'}</label>
               <input className={inputCls} type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+              <p className="text-[11px] text-ink-faint mt-1">
+                {form.role === 'admin' ? '4-digit PIN, 6-digit PIN, or 8+ characters' : 'At least 8 characters'}
+              </p>
             </div>
           </div>
           <div className="flex gap-2 mt-4">
             <button
               className={btn('green')}
               onClick={save}
-              disabled={busy || !form.name || !form.email || (!editingId && !form.password) || (needsUnit && !form.unitId) || (form.role === 'dept_head' && !form.departmentId)}
+              disabled={busy || !form.name || !form.email || (form.password ? !passwordOk(form.role, form.password) : !editingId) || (needsUnit && !form.unitId) || (form.role === 'dept_head' && !form.departmentId)}
             >
               {editingId ? 'Save changes' : 'Create user'}
             </button>

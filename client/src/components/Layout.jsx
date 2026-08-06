@@ -26,6 +26,7 @@ const ICONS = {
   verify: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M9 15l2 2 4-4'],
   inbox: ['M22 12h-6l-2 3h-4l-2-3H2', 'M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11'],
   logout: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
+  lock: ['M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z', 'M7 11V7a5 5 0 0 1 10 0v4'],
   chart: ['M3 3v18h18', 'M8 17v-6', 'M13 17V7', 'M18 17v-9'],
 };
 
@@ -118,6 +119,9 @@ export default function Layout({ title, subtitle, children, actions }) {
                   {user.unit?.name ? ` · ${user.unit.name}` : ''}
                 </div>
               </div>
+              <Link to="/change-password" title="Change password" className="p-1.5 rounded-lg text-ink-faint hover:text-ink hover:bg-line-soft shrink-0">
+                <Icon d={ICONS.lock} className="w-4 h-4" />
+              </Link>
               <button onClick={doLogout} title="Log out" className="p-1.5 rounded-lg text-ink-faint hover:text-ink hover:bg-line-soft shrink-0">
                 <Icon d={ICONS.logout} className="w-4 h-4" />
               </button>
@@ -131,9 +135,14 @@ export default function Layout({ title, subtitle, children, actions }) {
         <div className="flex items-center justify-between">
           <Link to={homeFor(user)}><Brand /></Link>
           {user && (
-            <button onClick={doLogout} title="Log out" className="p-2 rounded-lg text-ink-faint hover:text-ink hover:bg-line-soft">
-              <Icon d={ICONS.logout} />
-            </button>
+            <div className="flex items-center">
+              <Link to="/change-password" title="Change password" className="p-2 rounded-lg text-ink-faint hover:text-ink hover:bg-line-soft">
+                <Icon d={ICONS.lock} />
+              </Link>
+              <button onClick={doLogout} title="Log out" className="p-2 rounded-lg text-ink-faint hover:text-ink hover:bg-line-soft">
+                <Icon d={ICONS.logout} />
+              </button>
+            </div>
           )}
         </div>
         <nav className="flex gap-1 mt-2 -mx-1 overflow-x-auto pb-1">

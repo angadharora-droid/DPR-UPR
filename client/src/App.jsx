@@ -14,6 +14,7 @@ import AdminMaster from './pages/AdminMaster.jsx';
 import AdminImport from './pages/AdminImport.jsx';
 import History from './pages/History.jsx';
 import PurchasePortal from './pages/PurchasePortal.jsx';
+import ChangePassword from './pages/ChangePassword.jsx';
 
 function Protected({ roles, children }) {
   const { user } = useAuth();
@@ -44,6 +45,7 @@ export default function App() {
 
       <Route path="/purchase" element={<Protected roles={['purchase_head']}><PurchasePortal /></Protected>} />
       <Route path="/history" element={<Protected roles={['admin', 'unit_head', 'dept_head']}><History /></Protected>} />
+      <Route path="/change-password" element={<Protected><ChangePassword /></Protected>} />
 
       <Route path="*" element={<Navigate to={homeFor(user)} replace />} />
     </Routes>

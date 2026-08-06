@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { authRequired } from '../middleware/auth.js';
+import { passwordRuleError, phoneKey } from '../utils/credentials.js';
+import { loginRateLimit, isLockedOut, recordFailure, clearFailures } from '../middleware/loginLimiter.js';
 
 const router = Router();
 
@@ -19,17 +21,40 @@ function publicUser(u) {
   };
 }
 
-router.post('/login', async (req, res, next) => {
+const withRefs = (q) => q.populate('unit', 'name city').populate('department', 'name hasMinMax');
+
+// The identifier is an email (contains @), a local login ID, or — for admin
+// accounts only — a phone number matched on its last 10 digits.
+async function findByIdentifier(id) {
+  if (id.includes('@')) return withRefs(User.findOne({ email: id }));
+  const user = await withRefs(User.findOne({ loginId: id }));
+  if (user) return user;
+  const pk = phoneKey(id);
+  if (!pk) return null;
+  const admins = await withRefs(User.find({ role: 'admin' }));
+  return admins.find((a) => phoneKey(a.phone) === pk) || null;
+}
+
+router.post('/login', loginRateLimit, async (req, res, next) => {
   try {
-    const { login, email, password } = req.body;
-    const id = String(login || email || '').toLowerCase().trim();
-    if (!id || !password) return res.status(400).json({ error: 'Login ID (or email) and password required' });
-    const user = await User.findOne({ $or: [{ email: id }, { loginId: id }] })
-      .populate('unit', 'name city')
-      .populate('department', 'name hasMinMax');
-    if (!user || !user.active) return res.status(401).json({ error: 'Invalid credentials' });
+    const { identifier, login, email, password } = req.body;
+    const id = String(identifier || login || email || '').toLowerCase().trim();
+    if (!id || !password) return res.status(400).json({ error: 'Email (or phone number) and password required' });
+    // One lockout counter per account no matter how the phone was formatted.
+    const key = phoneKey(id) || id;
+    if (isLockedOut(key))
+      return res.status(429).json({ error: 'Too many failed attempts. Please try again later.' });
+    const user = await findByIdentifier(id);
+    if (!user || !user.active) {
+      recordFailure(key);
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
     const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!ok) {
+      recordFailure(key);
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    clearFailures(key);
     user.lastLogin = new Date();
     await user.save();
     const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
@@ -55,8 +80,8 @@ router.get('/me', authRequired, async (req, res, next) => {
 router.post('/change-password', authRequired, async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    if (!newPassword || newPassword.length < 6)
-      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    const ruleError = passwordRuleError(req.user.role, newPassword);
+    if (ruleError) return res.status(400).json({ error: ruleError });
     const ok = await bcrypt.compare(currentPassword || '', req.user.passwordHash);
     if (!ok) return res.status(401).json({ error: 'Current password incorrect' });
     req.user.passwordHash = await bcrypt.hash(newPassword, 10);
