@@ -8,8 +8,8 @@ export const STORAGE_DIR = path.resolve(__dirname, '../../storage/uprs');
 
 // Column layout (UPR template order: Buffer Days before Required Qty)
 const COLS = [
-  { key: 'sno', label: 'S.No', width: 32, align: 'center' },
-  { key: 'itemName', label: 'Item', width: 168, align: 'left' },
+  { key: 'sno', label: 'S.No', width: 30, align: 'center' },
+  { key: 'itemName', label: 'Item', width: 170, align: 'left' },
   { key: 'uom', label: 'UOM', width: 45, align: 'center' },
   { key: 'closingStock', label: 'Closing Stock', width: 62, align: 'right' },
   { key: 'bufferDays', label: 'Buffer Days', width: 55, align: 'right' },
@@ -19,9 +19,23 @@ const COLS = [
 const TABLE_WIDTH = COLS.reduce((s, c) => s + c.width, 0);
 const MARGIN = 40;
 
+const INK = '#1c2733';
+const INK_SOFT = '#5c6773';
+const NAVY = '#2f4f6f';
+const NAVY_DARK = '#243d56';
+const CAT_BG = '#e4ebf3';
+const ZEBRA_BG = '#f5f8fb';
+const LINE = '#d8dee5';
+const HEAD_BG = '#edf1f5';
+const SIGN_LINE = '#8b96a3';
+const STATUS_COLORS = { draft: '#8a6d1a', verified: '#1d7a46', sent: '#2f4f6f' };
+
 function num(v) {
   if (v === null || v === undefined || v === '') return '';
-  return Number(v) % 1 === 0 ? String(Number(v)) : Number(v).toFixed(2);
+  const n = Number(v);
+  if (Number.isNaN(n)) return String(v);
+  const opts = n % 1 === 0 ? {} : { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+  return n.toLocaleString('en-IN', opts);
 }
 
 export function generateUprPdf(upr) {
@@ -33,59 +47,8 @@ export function generateUprPdf(upr) {
   const stream = fs.createWriteStream(filePath);
   doc.pipe(stream);
 
-  // Header
-  doc.font('Helvetica-Bold').fontSize(15).text('Centre Point Hospitality', { align: 'center' });
-  doc.fontSize(12).text(`Unit Purchase Requisition — ${upr.unit.name}${upr.unit.city ? ', ' + upr.unit.city : ''}`, { align: 'center' });
-  doc.font('Helvetica').fontSize(9).text(`Requisition Date: ${upr.cycleDate}`, { align: 'center' });
-  doc.moveDown(0.8);
-
-  const bottomLimit = doc.page.height - MARGIN - 40;
-
-  function drawHeaderRow(y) {
-    let x = MARGIN;
-    doc.font('Helvetica-Bold').fontSize(7.5);
-    doc.rect(MARGIN, y, TABLE_WIDTH, 16).fillAndStroke('#e8e8e8', '#999');
-    doc.fillColor('#000');
-    for (const col of COLS) {
-      doc.text(col.label, x + 2, y + 4, { width: col.width - 4, align: col.align });
-      x += col.width;
-    }
-    return y + 16;
-  }
-
-  function drawLineRow(y, line, sno) {
-    doc.font('Helvetica').fontSize(7.5);
-    const cells = {
-      sno: String(sno),
-      itemName: line.itemName || '',
-      uom: line.uom || '',
-      closingStock: num(line.closingStock),
-      bufferDays: num(line.bufferDays),
-      requiredQty: num(line.requiredQty),
-      remark: line.remark || '',
-    };
-    const rowH = Math.max(
-      14,
-      doc.heightOfString(cells.itemName, { width: COLS[1].width - 4 }) + 6,
-      doc.heightOfString(cells.remark, { width: COLS[6].width - 4 }) + 6
-    );
-    let x = MARGIN;
-    doc.rect(MARGIN, y, TABLE_WIDTH, rowH).stroke('#ccc');
-    for (const col of COLS) {
-      doc.text(cells[col.key], x + 2, y + 3, { width: col.width - 4, align: col.align });
-      x += col.width;
-    }
-    return y + rowH;
-  }
-
-  function sectionTitle(y, text, level) {
-    const h = 16;
-    doc.rect(MARGIN, y, TABLE_WIDTH, h).fillAndStroke(level === 0 ? '#2f4f6f' : '#d8e2ec', '#999');
-    doc.fillColor(level === 0 ? '#fff' : '#1a2a3a').font('Helvetica-Bold').fontSize(level === 0 ? 9 : 8);
-    doc.text(text, MARGIN + 4, y + 4, { width: TABLE_WIDTH - 8 });
-    doc.fillColor('#000');
-    return y + h;
-  }
+  const unitLabel = `${upr.unit.name}${upr.unit.city ? ', ' + upr.unit.city : ''}`;
+  const bottomLimit = doc.page.height - MARGIN - 26; // keep clear of the footer strip
 
   // Group lines: Department -> Category
   const byDept = new Map();
@@ -98,40 +61,197 @@ export function generateUprPdf(upr) {
     byCat.get(c).push(line);
   }
 
-  let y = doc.y;
-  function ensureSpace(needed) {
-    if (y + needed > bottomLimit) {
-      doc.addPage();
-      y = MARGIN;
-      y = drawHeaderRow(y);
-    }
+  // ---- Letterhead (first page only) ----
+  doc.rect(0, 0, doc.page.width, 5).fill(NAVY);
+  doc.font('Helvetica-Bold').fontSize(16).fillColor(INK).text('Centre Point Hospitality', MARGIN, 32, { lineBreak: false });
+  doc.font('Helvetica-Bold').fontSize(10.5).fillColor(NAVY).text('UNIT PURCHASE REQUISITION', MARGIN, 37, { width: TABLE_WIDTH, align: 'right' });
+  doc.moveTo(MARGIN, 56).lineTo(MARGIN + TABLE_WIDTH, 56).lineWidth(1).stroke(NAVY);
+
+  const meta = [
+    ['UNIT', unitLabel, 160],
+    ['REQUISITION DATE', upr.cycleDate, 110],
+    ['STATUS', (upr.status || '').toUpperCase() || '—', 80],
+    ['ITEMS', `${upr.lines.length} across ${byDept.size} department${byDept.size === 1 ? '' : 's'}`, 165],
+  ];
+  const metaY = 66;
+  let metaX = MARGIN;
+  let metaBottom = metaY + 20;
+  for (const [label, value, width] of meta) {
+    doc.font('Helvetica').fontSize(6.5).fillColor(INK_SOFT).text(label, metaX, metaY, { width: width - 10 });
+    const color = label === 'STATUS' ? STATUS_COLORS[upr.status] || INK : INK;
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(color).text(value, metaX, metaY + 9, { width: width - 10 });
+    metaBottom = Math.max(metaBottom, doc.y);
+    metaX += width;
   }
 
-  y = drawHeaderRow(y);
+  // ---- Table primitives ----
+  function drawTableHeader(yy) {
+    const h = 18;
+    doc.rect(MARGIN, yy, TABLE_WIDTH, h).fill(HEAD_BG);
+    let x = MARGIN;
+    doc.font('Helvetica-Bold').fontSize(7.5).fillColor(INK);
+    for (const col of COLS) {
+      doc.text(col.label, x + 3, yy + 5.5, { width: col.width - 6, align: col.align });
+      x += col.width;
+    }
+    doc.moveTo(MARGIN, yy + h).lineTo(MARGIN + TABLE_WIDTH, yy + h).lineWidth(0.8).stroke(NAVY);
+    return yy + h;
+  }
+
+  function drawDeptBand(yy, name, contd) {
+    const h = 18;
+    doc.rect(MARGIN, yy, TABLE_WIDTH, h).fill(NAVY);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor('#ffffff')
+      .text(contd ? `${name} (contd.)` : name, MARGIN + 6, yy + 5, { width: TABLE_WIDTH - 12, lineBreak: false });
+    return yy + h;
+  }
+
+  function drawCatBand(yy, name, count, contd) {
+    const h = 15;
+    doc.rect(MARGIN, yy, TABLE_WIDTH, h).fill(CAT_BG);
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(NAVY_DARK)
+      .text(contd ? `${name} (contd.)` : name, MARGIN + 6, yy + 4, { width: TABLE_WIDTH - 124, lineBreak: false });
+    if (!contd) {
+      doc.font('Helvetica').fontSize(7).fillColor(INK_SOFT)
+        .text(`${count} item${count === 1 ? '' : 's'}`, MARGIN + TABLE_WIDTH - 110, yy + 4.5, { width: 104, align: 'right' });
+    }
+    return yy + h;
+  }
+
+  function measureRow(line, sno) {
+    const cells = {
+      sno: String(sno),
+      itemName: line.itemName || '',
+      uom: line.uom || '',
+      closingStock: num(line.closingStock),
+      bufferDays: num(line.bufferDays),
+      requiredQty: num(line.requiredQty),
+      remark: line.remark || '',
+    };
+    doc.font('Helvetica').fontSize(8);
+    const rowH = Math.max(
+      15,
+      doc.heightOfString(cells.itemName, { width: COLS[1].width - 8 }) + 7,
+      doc.heightOfString(cells.remark, { width: COLS[6].width - 8 }) + 7
+    );
+    return { cells, rowH };
+  }
+
+  function drawRow(yy, { cells, rowH }, zebra) {
+    if (zebra) doc.rect(MARGIN, yy, TABLE_WIDTH, rowH).fill(ZEBRA_BG);
+    let x = MARGIN;
+    for (const col of COLS) {
+      const emphasis = col.key === 'requiredQty';
+      const muted = col.key === 'sno' || col.key === 'uom' || col.key === 'remark';
+      doc.font(emphasis ? 'Helvetica-Bold' : 'Helvetica').fontSize(8)
+        .fillColor(emphasis ? NAVY_DARK : muted ? INK_SOFT : INK);
+      doc.text(cells[col.key], x + 4, yy + 4, { width: col.width - 8, align: col.align });
+      x += col.width;
+    }
+    doc.lineWidth(0.5);
+    doc.moveTo(MARGIN, yy + rowH).lineTo(MARGIN + TABLE_WIDTH, yy + rowH).stroke(LINE);
+    x = MARGIN;
+    doc.moveTo(x, yy).lineTo(x, yy + rowH).stroke(LINE);
+    for (const col of COLS) {
+      x += col.width;
+      doc.moveTo(x, yy).lineTo(x, yy + rowH).stroke(LINE);
+    }
+    return yy + rowH;
+  }
+
+  // ---- Table body: repeat the header and the open department/category on page breaks ----
+  let y = metaBottom + 14;
+  let currentDept = null;
+  let currentCat = null;
+
+  function newPage() {
+    doc.addPage();
+    y = MARGIN;
+    y = drawTableHeader(y);
+    if (currentDept) y = drawDeptBand(y, currentDept, true);
+    if (currentCat) y = drawCatBand(y, currentCat, 0, true);
+  }
+  function ensureSpace(needed) {
+    if (y + needed > bottomLimit) newPage();
+  }
+
+  y = drawTableHeader(y);
   for (const [deptName, byCat] of byDept) {
-    ensureSpace(40);
-    y = sectionTitle(y, deptName, 0);
+    currentDept = null;
+    currentCat = null;
+    ensureSpace(18 + 15 + 24);
+    y = drawDeptBand(y, deptName, false);
+    currentDept = deptName;
     for (const [catName, lines] of byCat) {
-      ensureSpace(36);
-      y = sectionTitle(y, catName, 1);
+      currentCat = null;
+      ensureSpace(15 + 24);
+      y = drawCatBand(y, catName, lines.length, false);
+      currentCat = catName;
       let sno = 1;
+      let rowIdx = 0;
       for (const line of lines) {
-        ensureSpace(20);
-        y = drawLineRow(y, line, sno++);
+        const m = measureRow(line, sno++);
+        ensureSpace(m.rowH);
+        y = drawRow(y, m, rowIdx % 2 === 1);
+        rowIdx++;
       }
     }
   }
+  currentDept = null;
+  currentCat = null;
 
-  // Signature block
-  if (y + 60 > bottomLimit) {
+  // Totals band
+  ensureSpace(22);
+  doc.rect(MARGIN, y, TABLE_WIDTH, 18).fill(HEAD_BG);
+  doc.moveTo(MARGIN, y).lineTo(MARGIN + TABLE_WIDTH, y).lineWidth(0.8).stroke(NAVY);
+  doc.font('Helvetica-Bold').fontSize(8).fillColor(INK).text('Total', MARGIN + 6, y + 5, { lineBreak: false });
+  doc.text(
+    `${upr.lines.length} item${upr.lines.length === 1 ? '' : 's'} · ${byDept.size} department${byDept.size === 1 ? '' : 's'}`,
+    MARGIN, y + 5, { width: TABLE_WIDTH - 6, align: 'right' }
+  );
+  y += 18;
+
+  // ---- Signature block ----
+  if (y + 96 > bottomLimit) {
     doc.addPage();
     y = MARGIN;
   }
-  y += 24;
-  doc.font('Helvetica').fontSize(9);
-  const signedAt = upr.verifiedAt ? new Date(upr.verifiedAt).toLocaleString('en-IN') : '';
-  doc.text(`Unit Head Sign: ${upr.verifiedSignName || ''}`, MARGIN, y);
-  doc.text(`Date: ${signedAt}`, MARGIN + 300, y);
+  const sigW = 205;
+  const sigLineY = y + 58;
+  const rightX = MARGIN + TABLE_WIDTH - sigW;
+  const signedAt = upr.verifiedAt
+    ? new Date(upr.verifiedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : '';
+
+  if (upr.verifiedSignName) {
+    doc.font('Helvetica-Oblique').fontSize(12).fillColor(INK)
+      .text(upr.verifiedSignName, MARGIN, sigLineY - 17, { width: sigW, align: 'center' });
+  }
+  doc.lineWidth(0.8);
+  doc.moveTo(MARGIN, sigLineY).lineTo(MARGIN + sigW, sigLineY).stroke(SIGN_LINE);
+  doc.moveTo(rightX, sigLineY).lineTo(rightX + sigW, sigLineY).stroke(SIGN_LINE);
+
+  doc.font('Helvetica-Bold').fontSize(8).fillColor(INK);
+  doc.text('Unit Head — Prepared & Verified', MARGIN, sigLineY + 5, { width: sigW });
+  doc.text('Purchase Head — Received', rightX, sigLineY + 5, { width: sigW });
+
+  doc.font('Helvetica').fontSize(7.5).fillColor(INK_SOFT);
+  if (signedAt) doc.text(`Signed: ${signedAt}`, MARGIN, sigLineY + 16, { width: sigW });
+  doc.text('Date: ____________________', rightX, sigLineY + 16, { width: sigW });
+
+  // ---- Footer on every page ----
+  const range = doc.bufferedPageRange();
+  for (let i = range.start; i < range.start + range.count; i++) {
+    doc.switchToPage(i);
+    const savedBottom = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0; // footer sits inside the margin; stop pdfkit adding a page
+    const fy = doc.page.height - 26;
+    doc.moveTo(MARGIN, fy - 5).lineTo(MARGIN + TABLE_WIDTH, fy - 5).lineWidth(0.5).stroke(LINE);
+    doc.font('Helvetica').fontSize(7).fillColor(INK_SOFT);
+    doc.text(`UPR · ${unitLabel} · ${upr.cycleDate}`, MARGIN, fy, { lineBreak: false });
+    doc.text(`Page ${i - range.start + 1} of ${range.count}`, MARGIN, fy, { width: TABLE_WIDTH, align: 'right' });
+    doc.page.margins.bottom = savedBottom;
+  }
 
   doc.end();
   return new Promise((resolve, reject) => {
