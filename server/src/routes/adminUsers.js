@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import User, { ROLES } from '../models/User.js';
 import { authRequired, requireRole } from '../middleware/auth.js';
 import { logAudit } from '../services/audit.js';
+import { passwordRuleError } from '../utils/credentials.js';
 
 const router = Router();
 router.use(authRequired, requireRole('admin'));
@@ -41,6 +42,8 @@ router.post('/', async (req, res, next) => {
     if (!name || !email || !role || !password)
       return res.status(400).json({ error: 'name, email, role, password required' });
     if (!ROLES.includes(role)) return res.status(400).json({ error: 'Invalid role' });
+    const pwError = passwordRuleError(role, password);
+    if (pwError) return res.status(400).json({ error: pwError });
     if ((role === 'dept_head' || role === 'unit_head') && !unitId)
       return res.status(400).json({ error: 'Unit required for this role' });
     if (role === 'dept_head' && !departmentId)
@@ -82,7 +85,12 @@ router.put('/:id', async (req, res, next) => {
     if (unitId !== undefined) user.unit = unitId || null;
     if (departmentId !== undefined) user.department = departmentId || null;
     if (active !== undefined) user.active = active;
-    if (password) user.passwordHash = await bcrypt.hash(password, 10);
+    if (password) {
+      // user.role already reflects a role change from this same request.
+      const pwError = passwordRuleError(user.role, password);
+      if (pwError) return res.status(400).json({ error: pwError });
+      user.passwordHash = await bcrypt.hash(password, 10);
+    }
     await user.save();
     await logAudit({ entityType: 'user', entityId: user._id, action: password ? 'update+password-reset' : 'update', changedBy: req.user._id, oldValue: old, newValue: { name, email, loginId: user.loginId, phone, role, unitId, departmentId, active } });
     res.json({ ok: true });
