@@ -129,6 +129,9 @@ body {
     font-size: 0.8rem;
     padding: 0.3rem 0.8rem;
   }
+  .stamp-plain {
+    text-transform: none;
+  }
   .stamp-neutral { color: #64748b; background: #f1f5f9; }
   .stamp-warn { color: var(--color-accent-deep); background: var(--color-accent-soft); }
   .stamp-info { color: #1d4ed8; background: var(--color-info-soft); }
@@ -151,6 +154,23 @@ body {
     font-weight: 700;
     padding: 0.28rem 0.8rem;
     text-transform: none;
+  }
+  /* Unselected filter pill: neutral text, but the dot keeps the department's
+     colour so the pill still maps onto its block below. */
+  .dept-pill-off {
+    color: #64748b;
+    background: transparent;
+    border: 1px solid var(--color-line);
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.28rem 0.8rem;
+    text-transform: none;
+  }
+  .dept-pill-off:hover {
+    background: var(--color-line-soft);
+  }
+  .dept-pill-off::before {
+    background: var(--dept-ink, #94a3b8);
   }
   .dept-edge {
     border-left: 4px solid var(--dept-ink, #3730a3);

@@ -13,6 +13,7 @@ export default function UprReview() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(null);
+  const [deptFilter, setDeptFilter] = useState(null); // null = every department
 
   const editable = upr?.status === 'draft';
 
@@ -43,10 +44,11 @@ export default function UprReview() {
       if (!byCat.has(l.categoryName)) byCat.set(l.categoryName, []);
       byCat.get(l.categoryName).push(l);
     });
-    return [...byDept.entries()].map(([dept, byCat]) => {
+    return [...byDept.entries()].map(([dept, byCat], i) => {
       const all = [...byCat.values()].flat();
       return {
         dept,
+        colorIdx: i % 6, // fixed per department for this cycle, so filtering never re-colours a block
         count: all.length,
         edited: all.filter(isEdited).length,
         added: all.filter((l) => l.addedByUnitHead).length,
@@ -62,6 +64,10 @@ export default function UprReview() {
     }),
     [grouped]
   );
+
+  // One department at a time. Falls back to all if the filtered department
+  // leaves the UPR (e.g. its DPR was reopened while this screen was open).
+  const showing = deptFilter && grouped.some((g) => g.dept === deptFilter) ? grouped.filter((g) => g.dept === deptFilter) : grouped;
 
   async function saveLine(line, patch) {
     try {
@@ -175,8 +181,36 @@ export default function UprReview() {
         </p>
       )}
 
-      {grouped.map(({ dept, cats, count, edited, added }, di) => (
-        <section key={dept} className={`card mb-6 overflow-hidden dept-${di % 6} dept-edge`}>
+      {/* Department filter — click a pill to work through one department at a time */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className={`stamp stamp-plain ${deptFilter ? 'dept-pill-off' : 'stamp-info'}`}
+          onClick={() => setDeptFilter(null)}
+          aria-pressed={!deptFilter}
+        >
+          All departments · {upr.lines.length}
+        </button>
+        {grouped.map((g) => (
+          <button
+            key={g.dept}
+            type="button"
+            className={`stamp dept-${g.colorIdx} ${deptFilter === g.dept ? 'dept-pill' : 'dept-pill-off'}`}
+            onClick={() => setDeptFilter(deptFilter === g.dept ? null : g.dept)}
+            aria-pressed={deptFilter === g.dept}
+          >
+            {g.dept} · {g.count}
+          </button>
+        ))}
+        {deptFilter && (
+          <span className="text-xs text-ink-faint">
+            showing 1 of {grouped.length} departments — Verify &amp; lock still covers all {upr.lines.length} lines
+          </span>
+        )}
+      </div>
+
+      {showing.map(({ dept, cats, count, edited, added, colorIdx }) => (
+        <section key={dept} className={`card mb-6 overflow-hidden dept-${colorIdx} dept-edge`}>
           <div className="dept-head border-b border-line px-4 py-2.5 flex flex-wrap items-center gap-2">
             <span className="stamp dept-pill">{dept}</span>
             <span className="text-xs text-ink-faint">{count} line(s)</span>
