@@ -100,6 +100,10 @@ router.post('/consolidate', requireRole('unit_head'), async (req, res, next) => 
           bufferDays: l.bufferDays,
           requiredQty: l.requiredQty,
           remark: l.remark,
+          // frozen copy of the department head's figures — any later divergence
+          // is a unit-head edit and is shown as such on the UPR screen
+          sourceQty: l.requiredQty,
+          sourceRemark: l.remark || '',
         });
       }
     }
@@ -194,6 +198,7 @@ router.post('/:id/lines', requireRole('unit_head'), async (req, res, next) => {
       uom: uom || '',
       requiredQty: Number(requiredQty || 0),
       remark: remark || '',
+      addedByUnitHead: true,
     });
     await upr.save();
     const line = upr.lines[upr.lines.length - 1];

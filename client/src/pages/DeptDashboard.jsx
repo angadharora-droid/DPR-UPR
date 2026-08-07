@@ -9,6 +9,7 @@ export default function DeptDashboard() {
   const navigate = useNavigate();
   const [current, setCurrent] = useState(null);
   const [cycleDate, setCycleDate] = useState('');
+  const [lockedBy, setLockedBy] = useState(null); // 'verified'/'sent' once the Unit Head closes the cycle
   const [history, setHistory] = useState([]);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -18,6 +19,7 @@ export default function DeptDashboard() {
       .then((d) => {
         setCurrent(d.dpr);
         setCycleDate(d.cycleDate);
+        setLockedBy(d.lockedBy);
       })
       .catch((e) => setError(e.message));
     api('/dpr/history')
@@ -38,8 +40,29 @@ export default function DeptDashboard() {
     }
   }
 
+  // Reopen today's submitted DPR straight from the dashboard and land in edit mode.
+  async function editSubmitted() {
+    if (
+      !window.confirm(
+        'Reopen today\'s DPR for editing?\n\nIt goes back to Draft and your signature is removed, so remember to Sign & submit again. ' +
+          'Any changes the Unit Head already made to these lines are discarded — they will pull the corrected DPR in on their next refresh.'
+      )
+    )
+      return;
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/dpr/${current._id}/reopen`, { method: 'POST' });
+      navigate(`/dept/dpr/${current._id}`);
+    } catch (e) {
+      setError(e.message);
+      setBusy(false);
+    }
+  }
+
   const submittedCount = history.filter((d) => d.status === 'submitted').length;
   const lastSigned = history.find((d) => d.hodSignDate);
+  const canEditSubmitted = current?.status === 'submitted' && !lockedBy;
 
   return (
     <Layout
@@ -51,9 +74,16 @@ export default function DeptDashboard() {
             {busy ? 'Creating…' : "+ Start today's DPR"}
           </button>
         ) : (
-          <button className={btn(current.status === 'draft' ? 'green' : 'subtle')} onClick={() => navigate(`/dept/dpr/${current._id}`)}>
-            {current.status === 'draft' ? 'Continue DPR' : 'View DPR'}
-          </button>
+          <>
+            <button className={btn(current.status === 'draft' ? 'green' : 'subtle')} onClick={() => navigate(`/dept/dpr/${current._id}`)}>
+              {current.status === 'draft' ? 'Continue DPR' : 'View DPR'}
+            </button>
+            {canEditSubmitted && (
+              <button className={btn('green')} onClick={editSubmitted} disabled={busy}>
+                {busy ? 'Reopening…' : 'Edit DPR'}
+              </button>
+            )}
+          </>
         )
       }
     >
@@ -65,7 +95,9 @@ export default function DeptDashboard() {
           <div className="mt-1.5"><StatusBadge status={current ? current.status : 'pending'} /></div>
           <div className="mt-1 text-xs text-ink-soft">
             {current?.status === 'submitted'
-              ? `Signed ${new Date(current.hodSignDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+              ? `Signed ${new Date(current.hodSignDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${
+                  lockedBy ? `UPR ${lockedBy}` : 'still editable'
+                }`
               : current?.status === 'draft'
                 ? 'In progress'
                 : 'Not started'}

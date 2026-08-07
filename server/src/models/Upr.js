@@ -14,6 +14,12 @@ const uprLineSchema = new mongoose.Schema(
     bufferDays: { type: Number, default: null },
     requiredQty: { type: Number, default: 0 },
     remark: { type: String, trim: true, default: '' },
+    // What the department head submitted, captured at consolidate time. The UPR
+    // screen compares these with the live values to flag unit-head edits; null
+    // on lines the unit head added, which carry addedByUnitHead instead.
+    sourceQty: { type: Number, default: null },
+    sourceRemark: { type: String, trim: true, default: '' },
+    addedByUnitHead: { type: Boolean, default: false },
   },
   { _id: true }
 );

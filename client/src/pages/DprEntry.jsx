@@ -89,6 +89,9 @@ export default function DprEntry() {
   }, [suggest]);
 
   const editable = user.role === 'dept_head' && dpr?.status === 'draft';
+  // A submitted DPR can be pulled back by its own dept head until the Unit Head
+  // verifies the UPR; after that corrections belong to the next cycle.
+  const canReopen = user.role === 'dept_head' && dpr?.status === 'submitted' && !dpr?.lockedBy;
   // With a raw-material catalog loaded, entry is search-first: categories come
   // from the Excel and sections appear only once they hold items.
   const catalogMode = rmTotal > 0;
@@ -110,6 +113,33 @@ export default function DprEntry() {
       .then((r) => setRmTotal(r.total))
       .catch(() => {}); // no catalog uploaded yet — inputs stay plain
   }, [user.role]);
+
+  // Pull a submitted DPR back to Draft so this department can correct it. The
+  // lines leave the draft UPR and return when the Unit Head consolidates again.
+  async function reopenForEdit() {
+    if (
+      !window.confirm(
+        'Reopen this DPR for editing?\n\nIt goes back to Draft and your signature is removed, so remember to Sign & submit again. ' +
+          'Any changes the Unit Head already made to these lines are discarded — they will pull the corrected DPR in on their next refresh.'
+      )
+    )
+      return;
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/dpr/${id}/reopen`, { method: 'POST' });
+      const d = await api(`/dpr/${id}`);
+      setDpr(d);
+      setLines(mapLines(d.lines));
+      setDirty(false);
+      setShowErrors(false);
+      setImportResult(null);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function importPosFile(file) {
     if (!file) return;
@@ -385,7 +415,12 @@ export default function DprEntry() {
     const problems = validateLines(true);
     if (problems.length) return reportProblems(problems);
     setShowErrors(false);
-    if (!window.confirm(`Submit DPR and sign as "${user.name}"?\n\nItems with Required Qty 0 and no remark will be dropped. After submitting you cannot edit unless the Unit Head sends it back.`))
+    if (
+      !window.confirm(
+        `Submit DPR and sign as "${user.name}"?\n\nItems with Required Qty 0 and no remark will be dropped. ` +
+          'You can still reopen and edit it from this screen until the Unit Head verifies the UPR.'
+      )
+    )
       return;
     setBusy(true);
     setError('');
@@ -440,7 +475,14 @@ export default function DprEntry() {
             </button>
           </>
         ) : (
-          <StatusBadge status={dpr.status} lg />
+          <>
+            <StatusBadge status={dpr.status} lg />
+            {canReopen && (
+              <button className={btn('subtle')} onClick={reopenForEdit} disabled={busy}>
+                {busy ? 'Reopening…' : 'Edit DPR'}
+              </button>
+            )}
+          </>
         )
       }
     >
@@ -479,7 +521,17 @@ export default function DprEntry() {
       )}
       {dpr.status === 'submitted' && (
         <Note tone="info">
-          Submitted — signed by {dpr.hodSignName} on {new Date(dpr.hodSignDate).toLocaleString()}. Locked from further edits.
+          Submitted — signed by {dpr.hodSignName} on {new Date(dpr.hodSignDate).toLocaleString()}.{' '}
+          {canReopen ? (
+            <>
+              Spotted a mistake? <b>Edit DPR</b> puts it back in Draft so you can correct and sign it again — possible
+              until the Unit Head verifies this cycle's UPR.
+            </>
+          ) : dpr.lockedBy ? (
+            <>The Unit Head has {dpr.lockedBy} this cycle's UPR — locked from further edits.</>
+          ) : (
+            <>Locked from further edits.</>
+          )}
         </Note>
       )}
 
