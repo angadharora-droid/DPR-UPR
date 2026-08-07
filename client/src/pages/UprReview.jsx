@@ -16,6 +16,13 @@ export default function UprReview() {
 
   const editable = upr?.status === 'draft';
 
+  // A line is "edited" while its live figures differ from the frozen copy of
+  // what the department head submitted — set the value back and the pill goes.
+  const num = (v) => Number(v || 0);
+  const txt = (v) => String(v || '').trim();
+  const isEdited = (l) =>
+    l.sourceQty !== null && l.sourceQty !== undefined && (num(l.requiredQty) !== num(l.sourceQty) || txt(l.remark) !== txt(l.sourceRemark));
+
   function load() {
     api('/upr/current')
       .then((d) => {
@@ -36,11 +43,25 @@ export default function UprReview() {
       if (!byCat.has(l.categoryName)) byCat.set(l.categoryName, []);
       byCat.get(l.categoryName).push(l);
     });
-    return [...byDept.entries()].map(([dept, byCat]) => ({
-      dept,
-      cats: [...byCat.entries()].map(([cat, lines]) => ({ cat, lines })),
-    }));
+    return [...byDept.entries()].map(([dept, byCat]) => {
+      const all = [...byCat.values()].flat();
+      return {
+        dept,
+        count: all.length,
+        edited: all.filter(isEdited).length,
+        added: all.filter((l) => l.addedByUnitHead).length,
+        cats: [...byCat.entries()].map(([cat, lines]) => ({ cat, lines })),
+      };
+    });
   }, [upr]);
+
+  const touched = useMemo(
+    () => ({
+      edited: grouped.reduce((s, g) => s + g.edited, 0),
+      added: grouped.reduce((s, g) => s + g.added, 0),
+    }),
+    [grouped]
+  );
 
   async function saveLine(line, patch) {
     try {
@@ -119,7 +140,12 @@ export default function UprReview() {
   return (
     <Layout
       title={`UPR — ${user.unit?.name}`}
-      subtitle={`${upr.cycleDate} · ${upr.lines.length} line(s) across ${grouped.length} department(s)`}
+      subtitle={
+        `${upr.cycleDate} · ${upr.lines.length} line(s) across ${grouped.length} department(s)` +
+        (touched.edited || touched.added
+          ? ` · ${[touched.edited && `${touched.edited} edited`, touched.added && `${touched.added} added`].filter(Boolean).join(', ')} at unit level`
+          : '')
+      }
       actions={
         <>
           <StatusBadge status={upr.status} lg={upr.status !== 'draft'} />
@@ -139,15 +165,31 @@ export default function UprReview() {
     >
       <ErrorNote error={error} />
       {editable && (
-        <p className="mb-4 text-sm text-ink-soft">
-          Quantity and remark edits save on blur and are recorded in the audit log against the department head's original values.
+        <p className="mb-4 text-sm text-ink-soft flex flex-wrap items-center gap-x-2 gap-y-1">
+          Quantity and remark edits save on blur and are recorded in the audit log against the department head's original
+          values. Lines you change are pilled
+          <span className="stamp stamp-warn">edited</span>
+          and lines you add
+          <span className="stamp stamp-violet">added</span>
+          — hover a pill to see what the department submitted.
         </p>
       )}
 
-      {grouped.map(({ dept, cats }) => (
+      {grouped.map(({ dept, cats, count, edited, added }) => (
         <section key={dept} className="card mb-6 overflow-hidden">
-          <div className="bg-paper border-b border-line px-4 py-2.5 text-sm font-semibold">
-            {dept}
+          <div className="bg-paper border-b border-line px-4 py-2.5 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold">{dept}</span>
+            <span className="text-xs text-ink-faint">{count} line(s)</span>
+            {edited > 0 && (
+              <span className="stamp stamp-warn" title="Lines whose qty or remark you changed from what this department submitted">
+                {edited} edited
+              </span>
+            )}
+            {added > 0 && (
+              <span className="stamp stamp-violet" title="Lines you added to this department at unit level">
+                {added} added
+              </span>
+            )}
           </div>
           <div className="overflow-x-auto">
             {cats.map(({ cat, lines }) => (
@@ -164,7 +206,7 @@ export default function UprReview() {
                   </thead>
                   <tbody>
                     {lines.map((l, i) => (
-                      <LineRow key={l._id} line={l} index={i} editable={editable} onSave={saveLine} onRemove={removeLine} />
+                      <LineRow key={l._id} line={l} index={i} edited={isEdited(l)} editable={editable} onSave={saveLine} onRemove={removeLine} />
                     ))}
                   </tbody>
                 </table>
@@ -221,7 +263,7 @@ export default function UprReview() {
   );
 }
 
-function LineRow({ line, index, editable, onSave, onRemove }) {
+function LineRow({ line, index, edited, editable, onSave, onRemove }) {
   const [qty, setQty] = useState(line.requiredQty);
   const [remark, setRemark] = useState(line.remark);
   useEffect(() => {
@@ -235,10 +277,26 @@ function LineRow({ line, index, editable, onSave, onRemove }) {
     }
   }
 
+  const qtyChanged = edited && Number(line.requiredQty) !== Number(line.sourceQty || 0);
+
   return (
-    <tr>
+    <tr className={line.addedByUnitHead ? 'row-added' : edited ? 'row-edited' : undefined}>
       <td className="w-8 text-ink-faint font-mono text-xs">{index + 1}</td>
-      <td className="min-w-44">{line.itemName}</td>
+      <td className="min-w-44">
+        <span className="align-middle">{line.itemName}</span>
+        {line.addedByUnitHead ? (
+          <span className="ml-1.5 stamp stamp-violet align-middle" title="You added this line at unit level — it was not in the department's DPR">
+            added
+          </span>
+        ) : edited ? (
+          <span
+            className="ml-1.5 stamp stamp-warn align-middle"
+            title={`Department head submitted qty ${line.sourceQty}${line.sourceRemark ? ` · remark "${line.sourceRemark}"` : ''}`}
+          >
+            edited
+          </span>
+        ) : null}
+      </td>
       <td className="w-16 text-ink-soft">{line.uom}</td>
       <td className="w-24 num text-ink-soft">{line.closingStock ?? '—'}</td>
       <td className="w-24 num text-ink-soft">{line.bufferDays ?? '—'}</td>
@@ -247,7 +305,7 @@ function LineRow({ line, index, editable, onSave, onRemove }) {
           <input
             type="number"
             min="0"
-            className={inputCls + ' num'}
+            className={inputCls + ' num' + (qtyChanged ? ' border-accent' : '')}
             value={qty}
             onChange={(e) => setQty(e.target.value)}
             onBlur={blurSave}
@@ -255,6 +313,11 @@ function LineRow({ line, index, editable, onSave, onRemove }) {
           />
         ) : (
           <span className="font-medium">{line.requiredQty}</span>
+        )}
+        {qtyChanged && (
+          <span className="block text-[11px] text-ink-faint mt-0.5">
+            was <span className="line-through">{line.sourceQty}</span>
+          </span>
         )}
       </td>
       <td className="min-w-36">

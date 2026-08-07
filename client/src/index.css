@@ -80,6 +80,19 @@ body {
   .tbl tbody tr:hover td {
     background: #f8fafc;
   }
+  /* UPR lines the unit head has touched — tinted past the tr:hover rule above */
+  .tbl tbody tr.row-edited td {
+    background: color-mix(in srgb, var(--color-accent-soft) 45%, transparent);
+  }
+  .tbl tbody tr.row-edited:hover td {
+    background: color-mix(in srgb, var(--color-accent-soft) 70%, transparent);
+  }
+  .tbl tbody tr.row-added td {
+    background: color-mix(in srgb, var(--color-violet-soft) 45%, transparent);
+  }
+  .tbl tbody tr.row-added:hover td {
+    background: color-mix(in srgb, var(--color-violet-soft) 70%, transparent);
+  }
   .tbl-dense thead th {
     padding: 0.55rem 0.85rem;
   }

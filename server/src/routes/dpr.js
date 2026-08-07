@@ -26,15 +26,24 @@ function canAccessDpr(user, dpr) {
   return user.role === 'unit_head';
 }
 
-// Current cycle's DPR for the logged-in dept head (null if not created yet)
+// A cycle stays open to department-level re-editing until the Unit Head verifies
+// (signs + PDFs) the UPR. Returns the blocking status ('verified'/'sent') or null.
+async function cycleLockedBy(unit, cycleDate) {
+  const upr = await Upr.findOne({ unit, cycleDate, status: { $in: ['verified', 'sent'] } }).select('status');
+  return upr ? upr.status : null;
+}
+
+// Current cycle's DPR for the logged-in dept head (null if not created yet).
+// `lockedBy` tells the client whether a submitted DPR can still be reopened.
 router.get('/current', requireRole('dept_head'), async (req, res, next) => {
   try {
+    const cycleDate = todayCycle();
     const dpr = await Dpr.findOne({
       unit: req.user.unit,
       department: req.user.department,
-      cycleDate: todayCycle(),
+      cycleDate,
     }).populate('lines.category', 'name sortOrder');
-    res.json({ dpr, cycleDate: todayCycle() });
+    res.json({ dpr, cycleDate, lockedBy: dpr ? await cycleLockedBy(req.user.unit, cycleDate) : null });
   } catch (err) {
     next(err);
   }
@@ -206,25 +215,43 @@ router.post('/:id/submit', requireRole('dept_head'), async (req, res, next) => {
   }
 });
 
-// Unit Head sends a submitted DPR back to the dept head for re-edit (Open Q3: allowed)
-router.post('/:id/reopen', requireRole('unit_head'), async (req, res, next) => {
+// Reopen a submitted DPR for re-editing (Open Q3: allowed). Two callers:
+// the Unit Head sending a DPR back, and the Department Head pulling their own
+// back before the Unit Head verifies. Either way the DPR's lines leave the draft
+// UPR (any unit-head edits to them are dropped) and return on the next
+// consolidate/refresh. Blocked once the UPR is verified or sent.
+router.post('/:id/reopen', requireRole('unit_head', 'dept_head'), async (req, res, next) => {
   try {
     const dpr = await Dpr.findById(req.params.id);
     if (!dpr) return res.status(404).json({ error: 'DPR not found' });
     if (!canAccessDpr(req.user, dpr)) return res.status(403).json({ error: 'Forbidden' });
     if (dpr.status !== 'submitted') return res.status(409).json({ error: 'DPR is not submitted' });
-    const upr = await Upr.findOne({ unit: dpr.unit, cycleDate: dpr.cycleDate, status: { $in: ['verified', 'sent'] } });
-    if (upr) return res.status(409).json({ error: 'UPR already verified for this cycle — start a new cycle instead' });
+    const lockedBy = await cycleLockedBy(dpr.unit, dpr.cycleDate);
+    if (lockedBy)
+      return res.status(409).json({
+        error:
+          req.user.role === 'dept_head'
+            ? `The Unit Head has already ${lockedBy} this cycle's UPR — corrections go in the next cycle`
+            : 'UPR already verified for this cycle — start a new cycle instead',
+      });
     await Upr.updateOne(
       { unit: dpr.unit, cycleDate: dpr.cycleDate, status: 'draft' },
       { $pull: { dprs: dpr._id, lines: { dpr: dpr._id } } }
     );
+    const signedBy = dpr.hodSignName;
     dpr.status = 'draft';
     dpr.hodSignName = '';
     dpr.hodSignDate = null;
     await dpr.save();
-    await logAudit({ entityType: 'dpr', entityId: dpr._id, action: 'reopen', changedBy: req.user._id });
-    res.json({ ok: true });
+    await logAudit({
+      entityType: 'dpr',
+      entityId: dpr._id,
+      action: req.user.role === 'dept_head' ? 'dept-head-reopen' : 'reopen',
+      changedBy: req.user._id,
+      oldValue: { status: 'submitted', signedBy },
+      newValue: { status: 'draft' },
+    });
+    res.json({ ok: true, status: dpr.status });
   } catch (err) {
     next(err);
   }
@@ -270,7 +297,9 @@ router.get('/:id', async (req, res, next) => {
       .populate('createdBy', 'name');
     if (!dpr) return res.status(404).json({ error: 'DPR not found' });
     if (!canAccessDpr(req.user, dpr)) return res.status(403).json({ error: 'Forbidden' });
-    res.json(dpr);
+    // lockedBy: 'verified'/'sent' once the Unit Head has closed the cycle — the
+    // DPR screen uses it to decide whether re-editing is still on the table.
+    res.json({ ...dpr.toObject(), lockedBy: await cycleLockedBy(dpr.unit, dpr.cycleDate) });
   } catch (err) {
     next(err);
   }
