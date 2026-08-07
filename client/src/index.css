@@ -135,6 +135,30 @@ body {
   .stamp-violet { color: #6d28d9; background: var(--color-violet-soft); }
   .stamp-ok { color: #047857; background: var(--color-ok-soft); }
 
+  /* Department identity on the UPR screen — one colour per department block, so
+     a long consolidated list stays readable while the unit head edits it.
+     Kept clear of the amber/violet used by the edited/added line pills. */
+  .dept-0 { --dept-ink: #3730a3; --dept-bg: #e0e7ff; }
+  .dept-1 { --dept-ink: #0f766e; --dept-bg: #ccfbf1; }
+  .dept-2 { --dept-ink: #9f1239; --dept-bg: #ffe4e6; }
+  .dept-3 { --dept-ink: #0369a1; --dept-bg: #e0f2fe; }
+  .dept-4 { --dept-ink: #3f6212; --dept-bg: #ecfccb; }
+  .dept-5 { --dept-ink: #9a3412; --dept-bg: #ffedd5; }
+  .dept-pill {
+    color: var(--dept-ink, #3730a3);
+    background: var(--dept-bg, #e0e7ff);
+    font-size: 0.85rem;
+    font-weight: 700;
+    padding: 0.28rem 0.8rem;
+    text-transform: none;
+  }
+  .dept-edge {
+    border-left: 4px solid var(--dept-ink, #3730a3);
+  }
+  .dept-head {
+    background: color-mix(in srgb, var(--dept-bg, #e0e7ff) 40%, #ffffff);
+  }
+
   .rise {
     animation: rise 0.25s ease-out both;
   }

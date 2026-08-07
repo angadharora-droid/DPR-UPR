@@ -175,10 +175,10 @@ export default function UprReview() {
         </p>
       )}
 
-      {grouped.map(({ dept, cats, count, edited, added }) => (
-        <section key={dept} className="card mb-6 overflow-hidden">
-          <div className="bg-paper border-b border-line px-4 py-2.5 flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold">{dept}</span>
+      {grouped.map(({ dept, cats, count, edited, added }, di) => (
+        <section key={dept} className={`card mb-6 overflow-hidden dept-${di % 6} dept-edge`}>
+          <div className="dept-head border-b border-line px-4 py-2.5 flex flex-wrap items-center gap-2">
+            <span className="stamp dept-pill">{dept}</span>
             <span className="text-xs text-ink-faint">{count} line(s)</span>
             {edited > 0 && (
               <span className="stamp stamp-warn" title="Lines whose qty or remark you changed from what this department submitted">
