@@ -28,12 +28,15 @@ const ICONS = {
   logout: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
   lock: ['M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z', 'M7 11V7a5 5 0 0 1 10 0v4'],
   chart: ['M3 3v18h18', 'M8 17v-6', 'M13 17V7', 'M18 17v-9'],
+  report: ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M8 17v-3', 'M12 17v-5', 'M16 17v-2'],
 };
 
 function navFor(user) {
   if (user?.role === 'admin')
     return [
       ['Overview', '/admin', 'overview', true],
+      ['Analytics', '/analytics', 'chart'],
+      ['Reports', '/reports', 'report'],
       ['Units', '/admin/units', 'units'],
       ['Users', '/admin/users', 'users'],
       ['Master data', '/admin/master', 'master'],
@@ -44,7 +47,8 @@ function navFor(user) {
     return [
       ['Dashboard', '/unit', 'overview', true],
       ['UPR review', '/unit/upr', 'verify'],
-      ['Reports', '/unit/reports', 'chart'],
+      ['Analytics', '/analytics', 'chart'],
+      ['Reports', '/reports', 'report'],
       ['History', '/history', 'history'],
     ];
   if (user?.role === 'dept_head')
@@ -52,7 +56,11 @@ function navFor(user) {
       ['Dashboard', '/dept', 'docket', true],
       ['History', '/history', 'history'],
     ];
-  if (user?.role === 'purchase_head') return [['Incoming UPRs', '/purchase', 'inbox', true]];
+  if (user?.role === 'purchase_head')
+    return [
+      ['Incoming UPRs', '/purchase', 'inbox', true],
+      ['Analytics', '/analytics', 'chart'],
+    ];
   return [];
 }
 
