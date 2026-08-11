@@ -132,7 +132,8 @@ export function ChartSkeleton({ h = 'h-52' }) {
 export function useSort() {
   const [sort, setSort] = useState({ key: null, dir: 1 });
   const toggle = (key) => setSort((s) => (s.key === key ? { key, dir: -s.dir } : { key, dir: 1 }));
-  return [sort, toggle];
+  const reset = () => setSort({ key: null, dir: 1 });
+  return [sort, toggle, reset];
 }
 
 export function sortRows(rows, sort) {
