@@ -1,16 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useAuth } from '../AuthContext.jsx';
-import Layout, { ErrorNote, Note, Stat, btn, inputCls } from '../components/Layout.jsx';
+import Layout, { EmptyState, ErrorNote, Note, Stat, inputCls } from '../components/Layout.jsx';
+import { ChartSkeleton, FilterBar, StatSkeleton, TableSkeleton, daysAgo, today } from '../components/Reporting.jsx';
 
 const SERIES = '#4f46e5'; // brand indigo — validated ≥3:1 on the white card surface
-
-function daysAgo(n) {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
-}
-const today = () => new Date().toISOString().slice(0, 10);
 
 const fmt = (n) => (n ?? 0).toLocaleString();
 const fmtQty = (n) => {
@@ -229,17 +223,10 @@ export default function Analytics() {
   }
   useEffect(() => load(), []);
 
-  function preset(n) {
-    const f = daysAgo(n - 1);
-    const t = today();
-    setFrom(f);
-    setTo(t);
-    load(f, t);
-  }
-
   const s = data?.summary;
   const groupView = data && !data.scope.unitId;
   const noOrders = data && s.orderedLines === 0;
+  const avgPerDay = data && data.days ? Math.round(s.orderedLines / data.days) : 0;
 
   return (
     <Layout
@@ -252,15 +239,19 @@ export default function Analytics() {
     >
       <ErrorNote error={error} />
 
-      <div className="card p-4 mb-4 flex flex-wrap gap-3 items-end">
-        <div>
-          <label className="block text-xs text-ink-soft mb-1">From</label>
-          <input className={inputCls} type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </div>
-        <div>
-          <label className="block text-xs text-ink-soft mb-1">To</label>
-          <input className={inputCls} type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-        </div>
+      <FilterBar
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        busy={busy}
+        onRange={(f, t) => {
+          setFrom(f);
+          setTo(t);
+          load(f, t);
+        }}
+        onApply={() => load()}
+      >
         {data?.unitsList?.length > 0 && (
           <div>
             <label className="block text-xs text-ink-soft mb-1">Unit</label>
@@ -279,17 +270,24 @@ export default function Analytics() {
             </select>
           </div>
         )}
-        <button className={btn('green')} onClick={() => load()} disabled={busy}>
-          {busy ? 'Loading…' : 'Apply'}
-        </button>
-        <div className="flex gap-1.5 ml-auto">
-          {[7, 30, 90].map((n) => (
-            <button key={n} className={btn('subtle') + ' px-2.5 py-1.5 text-xs'} onClick={() => preset(n)} disabled={busy}>
-              Last {n} days
-            </button>
-          ))}
-        </div>
-      </div>
+      </FilterBar>
+
+      {!data && !error && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-5">
+            {Array.from({ length: 6 }, (_, i) => (
+              <StatSkeleton key={i} />
+            ))}
+          </div>
+          <div className="mb-4">
+            <ChartSkeleton />
+          </div>
+          <div className="grid lg:grid-cols-2 gap-4 items-start">
+            <TableSkeleton rows={5} />
+            <TableSkeleton rows={5} />
+          </div>
+        </>
+      )}
 
       {data && (
         <div className={busy ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
@@ -314,7 +312,9 @@ export default function Analytics() {
           </div>
 
           <section className="card overflow-hidden mb-4">
-            <CardHead hint="ordered lines per day">Daily ordering trend</CardHead>
+            <CardHead hint={`ordered lines per day${avgPerDay ? ` · avg ${fmt(avgPerDay)}/day` : ''}`}>
+              Daily ordering trend
+            </CardHead>
             <div className="px-4 py-4">
               <TrendChart points={data.trend} label="Ordered UPR lines per day" />
             </div>
@@ -355,9 +355,10 @@ export default function Analytics() {
               <span className="ml-2 font-normal text-xs text-ink-faint">ranked by order frequency in the range</span>
             </h2>
             {data.itemsByDepartment.length === 0 ? (
-              <div className="card border-dashed shadow-none px-6 py-8 text-center text-sm text-ink-faint">
-                Nothing ordered in this range yet
-              </div>
+              <EmptyState
+                title="Nothing ordered in this range"
+                hint="Department breakdowns appear once a UPR is verified or sent within the selected dates."
+              />
             ) : (
               <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 items-start">
                 {data.itemsByDepartment.map((d, i) => (
@@ -393,6 +394,7 @@ export default function Analytics() {
           <div className="grid lg:grid-cols-2 gap-4 items-start mb-4">
             <section className="card overflow-hidden">
               <CardHead hint="most frequently ordered in range">Top items overall</CardHead>
+              <div className="overflow-x-auto">
               <table className="tbl tbl-dense">
                 <thead>
                   <tr>
@@ -418,6 +420,7 @@ export default function Analytics() {
                   )}
                 </tbody>
               </table>
+              </div>
             </section>
 
             <section className="card overflow-hidden">
@@ -429,6 +432,7 @@ export default function Analytics() {
           {groupView && data.units.length > 0 && (
             <section className="card overflow-hidden">
               <CardHead hint="activity in the selected range">Unit comparison</CardHead>
+              <div className="overflow-x-auto">
               <table className="tbl tbl-dense">
                 <thead>
                   <tr>
@@ -468,6 +472,7 @@ export default function Analytics() {
                     })}
                 </tbody>
               </table>
+              </div>
             </section>
           )}
         </div>

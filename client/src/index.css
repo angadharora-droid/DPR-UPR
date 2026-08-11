@@ -182,11 +182,130 @@ body {
   .rise {
     animation: rise 0.25s ease-out both;
   }
+
+  /* Segmented quick-range control on the report filter row */
+  .seg {
+    display: inline-flex;
+    gap: 2px;
+    padding: 3px;
+    background: var(--color-line-soft);
+    border-radius: 0.5rem;
+  }
+  .seg-btn {
+    padding: 0.32rem 0.7rem;
+    border-radius: 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--color-ink-soft);
+    white-space: nowrap;
+    transition: color 0.12s, background-color 0.12s;
+  }
+  .seg-btn:hover:not(:disabled) {
+    color: var(--color-ink);
+  }
+  .seg-btn[aria-pressed='true'] {
+    background: var(--color-surface);
+    color: var(--color-brand-deep);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.1);
+  }
+  .seg-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  /* Underline tab bar (Reports hub) */
+  .tabs {
+    display: flex;
+    gap: 0.25rem;
+    border-bottom: 1px solid var(--color-line);
+    overflow-x: auto;
+  }
+  .tab-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.55rem 0.85rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-ink-soft);
+    white-space: nowrap;
+    border-radius: 0.5rem 0.5rem 0 0;
+  }
+  .tab-btn:hover {
+    color: var(--color-ink);
+    background: var(--color-line-soft);
+  }
+  .tab-btn[aria-selected='true'] {
+    color: var(--color-brand-deep);
+    font-weight: 600;
+  }
+  .tab-btn[aria-selected='true']::after {
+    content: '';
+    position: absolute;
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: -1px;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: var(--color-brand);
+  }
+
+  /* Sortable table headers */
+  .sort-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    width: 100%;
+    font: inherit;
+    color: inherit;
+    white-space: nowrap;
+  }
+  .sort-btn:hover {
+    color: var(--color-ink);
+  }
+  th[aria-sort] .sort-btn {
+    color: var(--color-ink);
+    font-weight: 600;
+  }
+  .sort-arrow {
+    font-size: 0.7rem;
+    opacity: 0.4;
+  }
+  th[aria-sort] .sort-arrow {
+    opacity: 1;
+    color: var(--color-brand);
+  }
+
+  /* Compliance-rate meter: fill carries state, track is a lighter step of the
+     same hue, and the % figure beside it keeps the value off color alone. */
+  .meter {
+    display: inline-block;
+    width: 3.5rem;
+    height: 0.4rem;
+    border-radius: 9999px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* First-load shimmer blocks */
+  .skeleton {
+    border-radius: 0.375rem;
+    background: linear-gradient(100deg, var(--color-line-soft) 35%, #e8edf4 50%, var(--color-line-soft) 65%);
+    background-size: 300% 100%;
+    animation: shimmer 1.3s ease-in-out infinite;
+  }
 }
 
 @keyframes rise {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: none; }
+}
+
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

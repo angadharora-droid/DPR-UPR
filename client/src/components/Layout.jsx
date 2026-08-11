@@ -222,7 +222,7 @@ export function Stat({ label, value, sub }) {
   return (
     <div className="card px-5 py-4">
       <div className="text-[13px] text-ink-faint">{label}</div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight num text-left">{value}</div>
+      <div className="mt-1 text-2xl font-semibold tracking-tight">{value}</div>
       {sub && <div className="mt-0.5 text-[13px] text-ink-soft">{sub}</div>}
     </div>
   );
