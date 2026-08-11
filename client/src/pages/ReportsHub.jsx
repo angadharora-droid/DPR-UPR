@@ -193,8 +193,8 @@ export default function ReportsHub() {
         { label: 'Cycle date', value: 'cycleDate' },
         ...(isAdmin && !unitId ? [{ label: 'Unit', value: 'unit' }] : []),
         { label: 'Status', value: 'status' },
-        { label: 'Lines', value: 'lines' },
-        { label: 'Ordered lines', value: 'orderedLines' },
+        { label: 'Items', value: 'lines' },
+        { label: 'Ordered items', value: 'orderedLines' },
         { label: 'Verified by', value: 'verifiedSignName' },
         { label: 'Verified at', value: (r) => (r.verifiedAt ? new Date(r.verifiedAt).toISOString() : '') },
         { label: 'Sent at', value: (r) => (r.sentAt ? new Date(r.sentAt).toISOString() : '') },
@@ -464,8 +464,8 @@ export default function ReportsHub() {
                     <th>Cycle date</th>
                     {isAdmin && !unitId && <th>Unit</th>}
                     <th>Status</th>
-                    <th className="text-right">Lines</th>
-                    <th className="text-right">Ordered</th>
+                    <th className="text-right">Items</th>
+                    <th className="text-right">Ordered items</th>
                     <th>Verified by</th>
                     <th>Sent at</th>
                     <th>Sent to</th>
