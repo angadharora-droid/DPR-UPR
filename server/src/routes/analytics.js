@@ -385,6 +385,61 @@ router.get('/register', requireRole('admin', 'unit_head'), async (req, res, next
 });
 
 // ---------------------------------------------------------------------------
+// Report: off-list additions — items departments added by hand outside the
+// min-max list (from submitted DPRs). The governance view behind the
+// "off-list additions" KPI: what keeps being ordered that the list lacks.
+// ---------------------------------------------------------------------------
+router.get('/offlist', requireRole('admin', 'unit_head'), async (req, res, next) => {
+  try {
+    const unitId = scopeUnitId(req);
+    if (req.user.role === 'unit_head' && !unitId) return res.status(400).json({ error: 'No unit assigned' });
+    const { from, to, days } = rangeFromQuery(req);
+    const rows = await Dpr.aggregate([
+      { $match: { ...unitFilter(unitId), cycleDate: { $gte: from, $lte: to }, status: 'submitted' } },
+      { $unwind: '$lines' },
+      { $match: { 'lines.isManuallyAdded': true, 'lines.requiredQty': { $gt: 0 } } },
+      { $lookup: { from: 'departments', localField: 'department', foreignField: '_id', as: 'dept' } },
+      { $lookup: { from: 'items', localField: 'lines.item', foreignField: '_id', as: 'masterItem' } },
+      { $addFields: {
+          itemName: {
+            $cond: [
+              { $in: ['$lines.itemNameOverride', ['', null]] },
+              { $ifNull: [{ $arrayElemAt: ['$masterItem.name', 0] }, 'Unknown item'] },
+              '$lines.itemNameOverride',
+            ],
+          },
+      } },
+      { $group: {
+          _id: { unit: '$unit', department: '$department', name: { $toLower: '$itemName' }, uom: '$lines.uom' },
+          item: { $last: '$itemName' },
+          uom: { $last: '$lines.uom' },
+          department: { $last: { $arrayElemAt: ['$dept.name', 0] } },
+          totalQty: { $sum: '$lines.requiredQty' },
+          cycles: { $addToSet: '$cycleDate' },
+          lastAdded: { $max: '$cycleDate' },
+          remark: { $last: '$lines.remark' },
+      } },
+      { $project: {
+          _id: 0, unit: '$_id.unit', item: 1, uom: 1, department: 1,
+          totalQty: 1, times: { $size: '$cycles' }, lastAdded: 1, remark: 1,
+      } },
+      { $sort: { times: -1, item: 1 } },
+      { $limit: 1000 },
+    ]);
+    const units = await Unit.find({ active: true }).select('name');
+    const unitName = new Map(units.map((u) => [String(u._id), u.name]));
+    res.json({
+      from,
+      to,
+      days,
+      rows: rows.map((r) => ({ ...r, unit: unitId ? undefined : unitName.get(String(r.unit)) || '' })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Report: UPR dispatch log — every UPR in the range with verification and
 // dispatch details.
 // ---------------------------------------------------------------------------

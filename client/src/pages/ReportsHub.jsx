@@ -38,6 +38,7 @@ function downloadCsv(filename, columns, rows) {
 const TABS = [
   ['compliance', 'DPR compliance'],
   ['register', 'Order register'],
+  ['offlist', 'Off-list additions'],
   ['dispatch', 'Dispatch log'],
   ['edits', 'Unit-head changes'],
 ];
@@ -93,6 +94,17 @@ function CardHead({ children, hint }) {
   );
 }
 
+// Compact headline figures above each report, so the table is detail rather
+// than the only way to read the range.
+function MiniStat({ label, value, tone = '' }) {
+  return (
+    <div className="card px-4 py-2.5 min-w-32">
+      <div className="text-[11px] text-ink-faint">{label}</div>
+      <div className={`text-lg font-semibold tracking-tight ${tone}`}>{value}</div>
+    </div>
+  );
+}
+
 export default function ReportsHub() {
   const { user } = useAuth();
   const isAdmin = user.role === 'admin';
@@ -108,7 +120,7 @@ export default function ReportsHub() {
   const [data, setData] = useState({}); // tab -> payload
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [sort, toggleSort] = useSort();
+  const [sort, toggleSort, resetSort] = useSort();
 
   useEffect(() => {
     if (isAdmin) api('/admin/units').then((u) => setUnits(u.filter((x) => x.active !== false))).catch(() => {});
@@ -134,6 +146,7 @@ export default function ReportsHub() {
   // report and browser back/forward walks between tabs.
   function switchTab(k) {
     if (k === tab) return;
+    resetSort();
     setParams(k === 'compliance' ? {} : { tab: k });
   }
 
@@ -159,6 +172,78 @@ export default function ReportsHub() {
   }, [data.register, search]);
 
   const sortedRegister = useMemo(() => sortRows(registerRows, sort), [registerRows, sort]);
+
+  const offlistRows = useMemo(() => {
+    const rows = data.offlist?.rows || [];
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(
+      (r) =>
+        r.item.toLowerCase().includes(q) ||
+        (r.department || '').toLowerCase().includes(q) ||
+        (r.remark || '').toLowerCase().includes(q)
+    );
+  }, [data.offlist, search]);
+  const sortedOfflist = useMemo(() => sortRows(offlistRows, sort), [offlistRows, sort]);
+  const sortedDispatch = useMemo(() => sortRows(data.dispatch?.rows || [], sort), [data.dispatch, sort]);
+
+  // Headline figures for the active report — the range's story before the rows.
+  const chips = useMemo(() => {
+    const p = data[tab];
+    if (!p) return [];
+    if (tab === 'compliance') {
+      const deps = p.groups.flatMap((g) => g.departments);
+      const expected = p.days * deps.length;
+      const submitted = deps.reduce((n, x) => n + x.submitted, 0);
+      const ratePct = expected ? Math.round((submitted / expected) * 100) : 0;
+      const below = deps.filter((x) => x.ratePct < 60).length;
+      return [
+        {
+          label: 'Overall submission rate',
+          value: `${ratePct}%`,
+          tone: ratePct >= 90 ? 'text-ok' : ratePct >= 60 ? 'text-accent-deep' : 'text-danger',
+        },
+        { label: 'Departments at 100%', value: fmt(deps.filter((x) => x.ratePct === 100).length) },
+        { label: 'Below 60%', value: fmt(below), tone: below ? 'text-danger' : '' },
+        { label: 'Missing DPR days', value: fmt(deps.reduce((n, x) => n + x.missing, 0)) },
+      ];
+    }
+    if (tab === 'register') {
+      return [
+        { label: 'Items in register', value: fmt(p.rows.length) },
+        { label: 'Orders placed', value: fmt(p.rows.reduce((n, r) => n + r.times, 0)) },
+        { label: 'Departments ordering', value: fmt(new Set(p.rows.map((r) => `${r.unit}|${r.department}`)).size) },
+      ];
+    }
+    if (tab === 'offlist') {
+      return [
+        { label: 'Off-list items', value: fmt(p.rows.length), tone: p.rows.length ? 'text-accent-deep' : 'text-ok' },
+        { label: 'Times added', value: fmt(p.rows.reduce((n, r) => n + r.times, 0)) },
+        { label: 'Departments involved', value: fmt(new Set(p.rows.map((r) => `${r.unit}|${r.department}`)).size) },
+      ];
+    }
+    if (tab === 'dispatch') {
+      const sent = p.rows.filter((r) => r.status === 'sent').length;
+      const verified = p.rows.filter((r) => r.status === 'verified').length;
+      const inProgress = p.rows.length - sent - verified;
+      return [
+        { label: 'UPRs in range', value: fmt(p.rows.length) },
+        { label: 'Sent', value: fmt(sent), tone: 'text-ok' },
+        { label: 'Verified, unsent', value: fmt(verified), tone: verified ? 'text-accent-deep' : '' },
+        { label: 'Not yet verified', value: fmt(inProgress), tone: inProgress ? 'text-accent-deep' : '' },
+      ];
+    }
+    if (tab === 'edits') {
+      const by = (a) => p.rows.filter((r) => r.action === a).length;
+      return [
+        { label: 'Total changes', value: fmt(p.rows.length) },
+        { label: 'Qty edits', value: fmt(by('unit-head-edit')) },
+        { label: 'Items added', value: fmt(by('unit-head-add')) },
+        { label: 'Items removed', value: fmt(by('unit-head-remove')) },
+      ];
+    }
+    return [];
+  }, [data, tab]);
 
   function exportCsv() {
     const stamp = `${from}_to_${to}`;
@@ -188,6 +273,17 @@ export default function ReportsHub() {
         { label: 'Avg qty per order', value: 'avgQty' },
         { label: 'Last ordered', value: 'lastOrdered' },
       ], sortedRegister);
+    } else if (tab === 'offlist' && data.offlist) {
+      downloadCsv(`offlist-additions_${stamp}.csv`, [
+        ...(isAdmin && !unitId ? [{ label: 'Unit', value: 'unit' }] : []),
+        { label: 'Department', value: 'department' },
+        { label: 'Item', value: 'item' },
+        { label: 'UOM', value: 'uom' },
+        { label: 'Times added', value: 'times' },
+        { label: 'Total qty', value: 'totalQty' },
+        { label: 'Last added', value: 'lastAdded' },
+        { label: 'Remark', value: 'remark' },
+      ], sortedOfflist);
     } else if (tab === 'dispatch' && data.dispatch) {
       downloadCsv(`upr-dispatch_${stamp}.csv`, [
         { label: 'Cycle date', value: 'cycleDate' },
@@ -216,13 +312,11 @@ export default function ReportsHub() {
   }
 
   const showMatrix = data.compliance && data.compliance.dates.length <= 31;
-  const dispatchSent = data.dispatch ? data.dispatch.rows.filter((r) => r.status === 'sent').length : 0;
-  const dispatchVerified = data.dispatch ? data.dispatch.rows.filter((r) => r.status === 'verified').length : 0;
 
   return (
     <Layout
       title="Reports"
-      subtitle="Compliance, order register, dispatch log and change audit — exportable as CSV"
+      subtitle="Compliance, order register, off-list additions, dispatch log and change audit — exportable as CSV"
       actions={
         <button className={btn('subtle')} onClick={exportCsv} disabled={!d || busy}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden="true">
@@ -279,25 +373,26 @@ export default function ReportsHub() {
           </div>
         )}
         {tab === 'register' && (
-          <>
-            <div>
-              <label className="block text-xs text-ink-soft mb-1">Department</label>
-              <select
-                className={inputCls}
-                value={department}
-                onChange={(e) => {
-                  setDepartment(e.target.value);
-                  load(tab, from, to, unitId, e.target.value);
-                }}
-              >
-                <option value="">All departments</option>
-                {(data.register?.departments || []).map((dep) => (
-                  <option key={dep.id} value={dep.id}>
-                    {dep.name}{isAdmin && !unitId && dep.unit ? ` — ${dep.unit}` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label className="block text-xs text-ink-soft mb-1">Department</label>
+            <select
+              className={inputCls}
+              value={department}
+              onChange={(e) => {
+                setDepartment(e.target.value);
+                load(tab, from, to, unitId, e.target.value);
+              }}
+            >
+              <option value="">All departments</option>
+              {(data.register?.departments || []).map((dep) => (
+                <option key={dep.id} value={dep.id}>
+                  {dep.name}{isAdmin && !unitId && dep.unit ? ` — ${dep.unit}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {(tab === 'register' || tab === 'offlist') && (
             <div className="flex-1 min-w-44">
               <label className="block text-xs text-ink-soft mb-1">Search</label>
               <div className="relative">
@@ -307,7 +402,7 @@ export default function ReportsHub() {
                 </svg>
                 <input
                   className={inputCls + ' pl-8 pr-8'}
-                  placeholder="Item, department or category…"
+                  placeholder={tab === 'register' ? 'Item, department or category…' : 'Item, department or remark…'}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -326,13 +421,19 @@ export default function ReportsHub() {
                 )}
               </div>
             </div>
-          </>
         )}
       </FilterBar>
 
       {!d && !error && <TableSkeleton rows={8} />}
 
       <div className={busy ? 'opacity-60 transition-opacity' : 'transition-opacity'}>
+        {chips.length > 0 && (
+          <div className="flex flex-wrap gap-2.5 mb-4">
+            {chips.map((c) => (
+              <MiniStat key={c.label} label={c.label} value={c.value} tone={c.tone} />
+            ))}
+          </div>
+        )}
         {/* ---------------- DPR compliance ---------------- */}
         {tab === 'compliance' && data.compliance && (
           <>
@@ -353,16 +454,16 @@ export default function ReportsHub() {
                     <table className="tbl tbl-dense">
                       <thead>
                         <tr>
-                          <th>Department</th>
-                          <th className="text-right">Submitted</th>
-                          <th className="text-right">Drafts</th>
-                          <th className="text-right">Missing</th>
-                          <th className="text-right">Rate</th>
+                          <SortTh k="name" sort={sort} onSort={toggleSort}>Department</SortTh>
+                          <SortTh k="submitted" sort={sort} onSort={toggleSort} right>Submitted</SortTh>
+                          <SortTh k="drafts" sort={sort} onSort={toggleSort} right>Drafts</SortTh>
+                          <SortTh k="missing" sort={sort} onSort={toggleSort} right>Missing</SortTh>
+                          <SortTh k="ratePct" sort={sort} onSort={toggleSort} right>Rate</SortTh>
                           {showMatrix && <th>{`Days (${data.compliance.from.slice(5)} → ${data.compliance.to.slice(5)})`}</th>}
                         </tr>
                       </thead>
                       <tbody>
-                        {g.departments.map((dep) => (
+                        {sortRows(g.departments, sort).map((dep) => (
                           <tr key={dep.name}>
                             <td className="font-medium whitespace-nowrap">{dep.name}</td>
                             <td className="num">{dep.submitted} / {data.compliance.days}</td>
@@ -449,30 +550,86 @@ export default function ReportsHub() {
           </section>
         )}
 
+        {/* ---------------- Off-list additions ---------------- */}
+        {tab === 'offlist' && data.offlist && (
+          <section className="card overflow-hidden">
+            <CardHead
+              hint={
+                search.trim()
+                  ? `${fmt(offlistRows.length)} of ${fmt(data.offlist.rows.length)} items match · from submitted DPRs`
+                  : `${fmt(data.offlist.rows.length)} item(s) · hand-added outside the min-max list, from submitted DPRs`
+              }
+            >
+              Off-list additions
+            </CardHead>
+            {data.offlist.rows.length === 0 ? (
+              <div className="px-6 py-10 text-center text-sm text-ink-faint">
+                No off-list additions in this range — every ordered item came from the min-max list
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="tbl tbl-dense">
+                  <thead>
+                    <tr>
+                      {isAdmin && !unitId && <SortTh k="unit" sort={sort} onSort={toggleSort}>Unit</SortTh>}
+                      <SortTh k="department" sort={sort} onSort={toggleSort}>Department</SortTh>
+                      <SortTh k="item" sort={sort} onSort={toggleSort}>Item</SortTh>
+                      <th>UOM</th>
+                      <SortTh k="times" sort={sort} onSort={toggleSort} right>Times added</SortTh>
+                      <SortTh k="totalQty" sort={sort} onSort={toggleSort} right>Total qty</SortTh>
+                      <SortTh k="lastAdded" sort={sort} onSort={toggleSort} right>Last added</SortTh>
+                      <th>Remark</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedOfflist.map((r, i) => (
+                      <tr key={i}>
+                        {isAdmin && !unitId && <td className="text-ink-soft whitespace-nowrap">{r.unit}</td>}
+                        <td className="text-ink-soft whitespace-nowrap">{r.department}</td>
+                        <td className="font-medium">{r.item}</td>
+                        <td className="text-ink-soft whitespace-nowrap">{r.uom}</td>
+                        <td className="num">{fmt(r.times)}</td>
+                        <td className="num font-medium">{fmt(r.totalQty)}</td>
+                        <td className="num text-ink-soft">{r.lastAdded}</td>
+                        <td className="text-ink-soft text-xs max-w-60 truncate" title={r.remark || ''}>
+                          {r.remark || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                    {!sortedOfflist.length && (
+                      <tr>
+                        <td colSpan={8} className="text-center text-ink-faint text-xs py-6">
+                          No off-list additions matching the search
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* ---------------- UPR dispatch log ---------------- */}
         {tab === 'dispatch' && data.dispatch && (
           <section className="card overflow-hidden">
-            <CardHead
-              hint={`${fmt(data.dispatch.rows.length)} UPR(s) · ${fmt(dispatchSent)} sent${dispatchVerified ? ` · ${fmt(dispatchVerified)} verified, unsent` : ''}`}
-            >
-              UPR dispatch log
-            </CardHead>
+            <CardHead hint={`${fmt(data.dispatch.rows.length)} UPR(s) in the range`}>UPR dispatch log</CardHead>
             <div className="overflow-x-auto">
               <table className="tbl tbl-dense">
                 <thead>
                   <tr>
-                    <th>Cycle date</th>
-                    {isAdmin && !unitId && <th>Unit</th>}
-                    <th>Status</th>
-                    <th className="text-right">Items</th>
-                    <th className="text-right">Ordered items</th>
+                    <SortTh k="cycleDate" sort={sort} onSort={toggleSort}>Cycle date</SortTh>
+                    {isAdmin && !unitId && <SortTh k="unit" sort={sort} onSort={toggleSort}>Unit</SortTh>}
+                    <SortTh k="status" sort={sort} onSort={toggleSort}>Status</SortTh>
+                    <SortTh k="lines" sort={sort} onSort={toggleSort} right>Items</SortTh>
+                    <SortTh k="orderedLines" sort={sort} onSort={toggleSort} right>Ordered items</SortTh>
                     <th>Verified by</th>
-                    <th>Sent at</th>
+                    <SortTh k="sentAt" sort={sort} onSort={toggleSort}>Sent at</SortTh>
                     <th>Sent to</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.dispatch.rows.map((r) => (
+                  {sortedDispatch.map((r) => (
                     <tr key={r.id}>
                       <td className="font-medium whitespace-nowrap">{r.cycleDate}</td>
                       {isAdmin && !unitId && <td className="text-ink-soft whitespace-nowrap">{r.unit}</td>}
