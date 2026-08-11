@@ -50,37 +50,26 @@ const EDIT_LABEL = {
 };
 
 // Compliance matrix cell: letter + color, so status never rides on color alone.
+// Hovering shows the box's date (with weekday) in an instant tooltip.
 function DayCell({ status, date }) {
   const map = {
     submitted: ['S', 'bg-ok-soft text-ok'],
     draft: ['D', 'bg-accent-soft text-accent-deep'],
   };
   const [letter, cls] = map[status] || ['–', 'bg-line-soft text-ink-faint'];
+  const tip = date
+    ? `${new Date(date + 'T00:00:00').toLocaleDateString(undefined, {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      })} — ${status === 'submitted' ? 'submitted' : status === 'draft' ? 'draft only' : 'no DPR'}`
+    : undefined;
   return (
     <span
-      title={`${date}: ${status || 'no DPR'}`}
-      className={`inline-grid place-items-center w-5.5 h-5.5 rounded text-[10px] font-semibold ${cls}`}
+      data-tip={tip}
+      className={`daycell inline-grid place-items-center w-5.5 h-5.5 rounded text-[10px] font-semibold ${cls}`}
     >
       {letter}
-    </span>
-  );
-}
-
-// Submission-rate meter: the fill carries state, the track is a lighter step of
-// the same hue, and the % figure keeps the value off color alone.
-function RateMeter({ pct }) {
-  const [fill, track] =
-    pct >= 90
-      ? ['#059669', 'var(--color-ok-soft)']
-      : pct >= 60
-        ? ['#d97706', 'var(--color-accent-soft)']
-        : ['#dc2626', 'var(--color-danger-soft)'];
-  return (
-    <span className="inline-flex items-center justify-end gap-2">
-      <span className="meter" style={{ background: track }}>
-        <span style={{ display: 'block', height: '100%', borderRadius: 9999, width: `${Math.min(pct, 100)}%`, background: fill }} />
-      </span>
-      <span className="num font-medium w-9 shrink-0">{pct}%</span>
     </span>
   );
 }
@@ -458,7 +447,6 @@ export default function ReportsHub() {
                           <SortTh k="submitted" sort={sort} onSort={toggleSort} right>Submitted</SortTh>
                           <SortTh k="drafts" sort={sort} onSort={toggleSort} right>Drafts</SortTh>
                           <SortTh k="missing" sort={sort} onSort={toggleSort} right>Missing</SortTh>
-                          <SortTh k="ratePct" sort={sort} onSort={toggleSort} right>Rate</SortTh>
                           {showMatrix && <th>{`Days (${data.compliance.from.slice(5)} → ${data.compliance.to.slice(5)})`}</th>}
                         </tr>
                       </thead>
@@ -469,7 +457,6 @@ export default function ReportsHub() {
                             <td className="num">{dep.submitted} / {data.compliance.days}</td>
                             <td className="num text-ink-soft">{dep.drafts}</td>
                             <td className="num text-ink-soft">{dep.missing}</td>
-                            <td className="text-right whitespace-nowrap"><RateMeter pct={dep.ratePct} /></td>
                             {showMatrix && (
                               <td>
                                 <div className="flex flex-wrap gap-1">
