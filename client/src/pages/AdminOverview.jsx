@@ -37,6 +37,14 @@ export default function AdminOverview() {
               </div>
               <div className="text-right">
                 <div className="text-[10px] uppercase tracking-widest text-ink-faint mb-1">UPR</div>
+                {u.uprId && ['verified', 'sent'].includes(u.uprStatus) && (
+                  <button
+                    className="text-brand-deep text-xs underline underline-offset-2 hover:text-brand mr-2.5"
+                    onClick={() => navigate(`/upr/${u.uprId}`)}
+                  >
+                    view UPR
+                  </button>
+                )}
                 <StatusBadge status={u.uprStatus} />
               </div>
             </div>
