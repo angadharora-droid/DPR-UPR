@@ -57,6 +57,7 @@ router.get('/overview', requireRole('admin', 'purchase_head'), async (req, res, 
             return { name: d.name, dprStatus: dpr?.status || 'pending', dprId: dpr?._id || null };
           }),
         uprStatus: uprByUnit.get(String(u._id))?.status || 'pending',
+        uprId: uprByUnit.get(String(u._id))?._id || null,
         uprSentAt: uprByUnit.get(String(u._id))?.sentAt || null,
       })),
     });
