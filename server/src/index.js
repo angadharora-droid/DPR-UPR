@@ -14,6 +14,7 @@ import dprRoutes from './routes/dpr.js';
 import uprRoutes from './routes/upr.js';
 import reportRoutes from './routes/reports.js';
 import analyticsRoutes from './routes/analytics.js';
+import ssoRoutes from './routes/sso.js';
 
 const app = express();
 app.use(cors());
@@ -29,6 +30,7 @@ app.use('/api/dpr', dprRoutes);
 app.use('/api/upr', uprRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/sso', ssoRoutes);
 
 // In production the built client is served by this same server (single Railway service).
 const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../client/dist');

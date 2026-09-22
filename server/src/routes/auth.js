@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import { authRequired } from '../middleware/auth.js';
 import { passwordRuleError, phoneKey } from '../utils/credentials.js';
+import { verifySsoToken } from '../utils/ssoClient.js';
 import { loginRateLimit, isLockedOut, recordFailure, clearFailures } from '../middleware/loginLimiter.js';
 
 const router = Router();
@@ -35,6 +37,17 @@ async function findByIdentifier(id) {
   return admins.find((a) => phoneKey(a.phone) === pk) || null;
 }
 
+// Stamp the login and mint the app JWT. Shared by password login and central
+// sign-on so both produce the same session and response body.
+async function startSession(user) {
+  user.lastLogin = new Date();
+  await user.save();
+  const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES || '12h',
+  });
+  return { token, user: publicUser(user) };
+}
+
 router.post('/login', loginRateLimit, async (req, res, next) => {
   try {
     const { identifier, login, email, password } = req.body;
@@ -55,12 +68,24 @@ router.post('/login', loginRateLimit, async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     clearFailures(key);
-    user.lastLogin = new Date();
-    await user.save();
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
-      expiresIn: process.env.JWT_EXPIRES || '12h',
-    });
-    res.json({ token, user: publicUser(user) });
+    res.json(await startSession(user));
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Central sign-on: the browser brings a hand-off token from the portal's auth
+// service, which tells us which local user (Mongo _id) it belongs to. Password
+// login is unchanged; this always fails unless AUTH_SERVICE_URL is set.
+router.post('/sso', loginRateLimit, async (req, res, next) => {
+  try {
+    const verified = await verifySsoToken(String(req.body?.token || ''));
+    if (!verified) return res.status(401).json({ error: 'SSO sign-in failed' });
+    const user = mongoose.isValidObjectId(verified.localUserId)
+      ? await withRefs(User.findById(verified.localUserId))
+      : null;
+    if (!user || !user.active) return res.status(404).json({ error: 'No account linked' });
+    res.json(await startSession(user));
   } catch (err) {
     next(err);
   }

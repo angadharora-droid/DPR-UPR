@@ -27,7 +27,12 @@ function Protected({ roles, children }) {
 }
 
 export default function App() {
-  const { user } = useAuth();
+  const { user, ssoChecking } = useAuth();
+  // Portal sign-on in progress (only when VITE_AUTH_URL is set): hold the
+  // routes back so the login page does not flash before the session arrives.
+  if (ssoChecking) {
+    return <div className="min-h-screen grid place-items-center text-ink-faint">Signing in…</div>;
+  }
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to={homeFor(user)} replace /> : <Login />} />
