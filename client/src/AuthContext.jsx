@@ -1,5 +1,6 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { api } from './api';
+import { resolveSsoToken, ssoEnabled, ssoLogout } from './sso';
 
 const AuthContext = createContext(null);
 
@@ -17,6 +18,36 @@ export function AuthProvider({ children }) {
     }
   });
 
+  // Central sign-on: with no local session and VITE_AUTH_URL set, ask the portal
+  // for a hand-off token before the login page is shown. Starts false when SSO
+  // is off, so the normal flow is untouched.
+  const [ssoChecking, setSsoChecking] = useState(() => !user && ssoEnabled());
+
+  useEffect(() => {
+    if (!ssoChecking) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await resolveSsoToken();
+        if (!cancelled && token) {
+          const data = await api('/auth/sso', { method: 'POST', body: { token } });
+          if (!cancelled && data?.token && data.user) {
+            localStorage.setItem('token', data.token);
+            localStorage.setItem('user', JSON.stringify(data.user));
+            setUser(data.user);
+          }
+        }
+      } catch {
+        /* not linked or auth service unreachable; fall through to the login page */
+      }
+      if (!cancelled) setSsoChecking(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function login(loginId, password) {
     // `identifier` accepts an email, a local login ID, or (admins only) a phone number
     const data = await api('/auth/login', { method: 'POST', body: { identifier: loginId, password } });
@@ -27,12 +58,15 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
+    // Also end the portal session, otherwise the next page load would sign
+    // straight back in through SSO. No-op unless VITE_AUTH_URL is set.
+    ssoLogout();
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
   }
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, ssoChecking, login, logout }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

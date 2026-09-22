@@ -21,7 +21,9 @@ export async function api(path, { method = 'GET', body, formData } = {}) {
   if (res.status === 401) {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    if (!path.startsWith('/auth/login')) window.location.href = '/login';
+    // Login attempts (password or SSO hand-off) report their own failure; only
+    // an expired session mid-app should bounce to /login.
+    if (!path.startsWith('/auth/login') && !path.startsWith('/auth/sso')) window.location.href = '/login';
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);

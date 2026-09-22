@@ -2,3 +2,5 @@ node_modules/
 dist/
 .env
 server/storage/
+.env.*
+*.env
